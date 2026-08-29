@@ -108,6 +108,44 @@ header {
     vertical-align: top;
 }
 
+/* 漢堡選單按鈕：預設（桌面）隱藏，只在窄螢幕才出現 */
+.nav-toggle {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    width: 40px;
+    height: 40px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 12px;
+}
+
+.nav-toggle:hover {
+    background-color: var(--bg-secondary);
+}
+
+.nav-toggle-bar {
+    display: block;
+    width: 100%;
+    height: 3px;
+    border-radius: 3px;
+    background-color: var(--text-main);
+    transition: var(--transition);
+}
+
+.nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(1) {
+    transform: translateY(8px) rotate(45deg);
+}
+.nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(2) {
+    opacity: 0;
+}
+.nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(3) {
+    transform: translateY(-8px) rotate(-45deg);
+}
+
 /* Hero Section */
 .hero-section {
     background: radial-gradient(circle at 80% 20%, #FFF8E7 0%, var(--bg-primary) 100%);
@@ -285,6 +323,42 @@ header {
     }
     .watchlist-grid {
         grid-template-columns: 1fr 1fr;
+    }
+
+    /* 導覽列窄螢幕收合成漢堡選單，避免文字擠在一起 */
+    .nav-toggle {
+        display: flex;
+    }
+    .nav-menu {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+        background-color: var(--bg-primary);
+        border-bottom: 3px dashed var(--primary-light);
+        padding: 10px 20px 16px;
+        box-shadow: 0 15px 20px rgba(0, 0, 0, 0.08);
+    }
+    .nav-menu.open {
+        display: flex;
+    }
+    .nav-menu .nav-link,
+    .nav-menu .nav-link-disabled {
+        display: block;
+        text-align: center;
+        width: 100%;
+    }
+    .nav-container {
+        position: relative;
+        flex-wrap: nowrap;
+    }
+
+    .stock-price-hero {
+        font-size: 1.5rem;
     }
 }
 
@@ -609,6 +683,12 @@ header {
     flex-shrink: 0;
 }
 
+/* 有滑鼠提示說明的欄位名稱（見 js/app.js 的 GLOSSARY），加個虛線底線提示「這裡有說明」 */
+.kv-label[title] {
+    border-bottom: 1px dotted var(--text-muted);
+    cursor: help;
+}
+
 .kv-value {
     font-weight: 800;
     color: var(--text-main);
@@ -621,6 +701,108 @@ header {
     font-size: 0.85rem;
     font-style: italic;
     margin-top: 10px;
+}
+
+/* 個股頁面標題列：名稱/資料時間 + 大大的目前股價 */
+.stock-detail-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.stock-price-hero {
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--primary-dark);
+    white-space: nowrap;
+}
+
+/* ⓘ 收合說明按鈕：預設只顯示一行提示文字，點了才展開下面的說明段落 */
+.info-toggle {
+    display: inline-block;
+    background: none;
+    border: none;
+    color: var(--accent-blue, #2B6CB0);
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 6px 0;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+.info-toggle:hover {
+    opacity: 0.75;
+}
+
+/* 空狀態 / 載入中 提示，統一加上吉祥物風格，維持可愛感而不是純文字 */
+.empty-state {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    background-color: var(--bg-secondary);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-top: 8px;
+}
+
+.empty-state-icon {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+
+/* 分頁籤（走勢圖 / 高低點 / 新聞 / 法說會財報 / 籌碼） */
+.detail-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 20px 0 15px;
+    border-bottom: 2px solid var(--bg-secondary);
+    padding-bottom: 10px;
+}
+
+.detail-tab-btn {
+    background-color: var(--bg-secondary);
+    border: none;
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 0.88rem;
+    padding: 9px 16px;
+    border-radius: 30px;
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.detail-tab-btn:hover {
+    background-color: var(--primary-light);
+    color: var(--primary-dark);
+}
+
+.detail-tab-btn.active {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.detail-tab-panel {
+    animation: fadeIn 0.25s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@media (max-width: 768px) {
+    .detail-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
 }
 
 /* 相關新聞 / 搜尋捷徑連結列表 */

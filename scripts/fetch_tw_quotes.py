@@ -48,6 +48,14 @@ ENDPOINTS = {
     "margin": f"{BASE_URL}/exchangeReport/MI_MARGN",                # 融資融券餘額
 }
 
+# 上市公司每日重大訊息（不在 /v1/ 底下，是 /opendata/ 這個獨立的分類）。
+# 這份資料只會有「今天」公布的公告，所以法說會累積檔（見下面）要靠每次
+# 執行時「疊加」進去，沒辦法一次回溯過去的公告。
+MATERIAL_NEWS_URL = "https://openapi.twse.com.tw/opendata/t187ap04_L"
+EARNINGS_OUTPUT_PATH = "data/tw_earnings_announcements.json"
+EARNINGS_KEYWORDS = ["法人說明會", "法說會", "投資人說明會", "法人說明会"]
+EARNINGS_MAX_PER_CODE = 5  # 每家公司最多保留幾筆比對到的公告
+
 # T86（三大法人買賣超）不在新版開放資料平台上，只能從舊版報表系統抓，
 # 而且必須指定「某一個交易日」的日期，沒有交易的那天會抓不到東西。
 T86_URL_TEMPLATE = "https://www.twse.com.tw/rwd/zh/fund/T86?date={date}&selectType=ALL&response=json"
@@ -58,8 +66,8 @@ OUTPUT_PATH = "data/tw_quotes.json"
 TAIPEI_OFFSET = timedelta(hours=8)
 
 # 不同報表的股號／股票名稱欄位命名不太一樣，依序嘗試這些候選欄位名稱
-CODE_KEY_CANDIDATES = ["Code", "證券代號", "股票代號", "SecuritiesCompanyCode"]
-NAME_KEY_CANDIDATES = ["Name", "證券名稱", "股票名稱"]
+CODE_KEY_CANDIDATES = ["Code", "證券代號", "股票代號", "公司代號", "SecuritiesCompanyCode"]
+NAME_KEY_CANDIDATES = ["Name", "證券名稱", "股票名稱", "公司名稱"]
 
 # BWIBBU_ALL 的欄位是英文縮寫，直接顯示給非技術使用者看不好懂，
 # 這裡轉成白話中文標籤（其餘兩份報表本來就是證交所官方中文標題，不需要轉）。
@@ -212,6 +220,94 @@ def fetch_institutional_t86():
     return None
 
 
+def update_tw_earnings_announcements():
+    """比對今天的證交所重大訊息，把跟法說會有關的公告疊加進累積檔案。
+
+    這個函式故意獨立於股價那份資料之外：就算這裡整個失敗，也絕對不能
+    影響到 tw_quotes.json 的更新（股價是最重要的資料）。
+    """
+    try:
+        rows = fetch_json(MATERIAL_NEWS_URL)
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
+        print(f"⚠️  抓取「上市公司重大訊息」失敗（{err}），這次略過法說會比對，不影響股價資料。", file=sys.stderr)
+        return
+
+    if not isinstance(rows, list) or len(rows) == 0:
+        print("⚠️  「上市公司重大訊息」回傳的格式不是預期的非空陣列，這次略過法說會比對。", file=sys.stderr)
+        return
+
+    sample = rows[0]
+    code_key = find_key(sample, CODE_KEY_CANDIDATES)
+    subject_key = "主旨" if "主旨" in sample else None
+    desc_key = "說明" if "說明" in sample else None
+    date_key = "發言日期" if "發言日期" in sample else None
+
+    if not code_key or not subject_key:
+        print(
+            f"⚠️  「上市公司重大訊息」的欄位跟預期不同（實際欄位：{list(sample.keys())}），這次略過法說會比對。",
+            file=sys.stderr,
+        )
+        return
+
+    matched = []
+    for row in rows:
+        subject = row.get(subject_key, "") or ""
+        desc = row.get(desc_key, "") or "" if desc_key else ""
+        haystack = subject + desc
+        if any(kw in haystack for kw in EARNINGS_KEYWORDS):
+            matched.append(
+                {
+                    "code": row.get(code_key),
+                    "date": row.get(date_key, "") if date_key else "",
+                    "subject": subject,
+                    "description": desc,
+                }
+            )
+
+    # 讀取現有的累積檔案（第一次執行時檔案還不存在，視為空的就好）
+    try:
+        with open(EARNINGS_OUTPUT_PATH, encoding="utf-8") as f:
+            existing = json.load(f)
+        by_code = existing.get("by_code", {})
+    except (FileNotFoundError, ValueError):
+        by_code = {}
+
+    added_count = 0
+    for item in matched:
+        code = item["code"]
+        if not code:
+            continue
+        entries = by_code.setdefault(code, [])
+        # 用「日期+主旨」去重，同一則公告在同一天內被排程重複抓到很多次，
+        # 不應該一直重複疊加
+        dedup_key = (item["date"], item["subject"])
+        if any((e.get("date"), e.get("subject")) == dedup_key for e in entries):
+            continue
+        entries.append(
+            {
+                "date": item["date"],
+                "subject": item["subject"],
+                "description": item["description"]
+            }
+        )
+        added_count += 1
+        # 保留最新的 N 筆（用日期字串排序，證交所日期是 YYYYMMDD 的民國年格式，字串排序恰好等於時間排序）
+        entries.sort(key=lambda e: e.get("date", ""), reverse=True)
+        by_code[code] = entries[:EARNINGS_MAX_PER_CODE]
+
+    now_utc = datetime.now(timezone.utc)
+    payload = {
+        "updated_at": now_utc.isoformat().replace("+00:00", "Z"),
+        "note": "由 scripts/fetch_tw_quotes.py 每次執行時，比對當天證交所重大訊息公告疊加而成，"
+        "只能從系統開始運作那天起累積，無法回溯更早的公告。",
+        "by_code": by_code,
+    }
+    with open(EARNINGS_OUTPUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+
+    print(f"法說會重大訊息比對完成：這次新增 {added_count} 筆，目前累積 {len(by_code)} 家公司的公告。")
+
+
 def main():
     # 1. 股價資料是必要的，抓不到就整個中止（避免網站用壞掉/空白的資料覆蓋現有檔案）
     try:
@@ -280,6 +376,12 @@ def main():
         "（如果上面三個數字是 0，代表證交所那份報表這次抓不到或欄位改了，"
         "看終端機上面的 ⚠️ 警告訊息了解細節）"
     )
+
+    # 3. 法說會重大訊息比對（獨立於股價資料之外，這裡萬一出錯也不能影響上面已經寫好的 tw_quotes.json）
+    try:
+        update_tw_earnings_announcements()
+    except Exception as err:  # noqa: BLE001 - 這裡故意攔截所有例外，法說會比對失敗不該讓整個排程報錯
+        print(f"⚠️  法說會重大訊息比對過程發生未預期的錯誤（{err}），這次略過，不影響股價資料。", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,12 @@
                 <span class="logo-icon">🌱</span>
                 <span>小資芽理財</span>
             </a>
-            <ul class="nav-menu">
+            <button type="button" class="nav-toggle" id="nav-toggle" aria-label="開啟選單" aria-expanded="false">
+                <span class="nav-toggle-bar"></span>
+                <span class="nav-toggle-bar"></span>
+                <span class="nav-toggle-bar"></span>
+            </button>
+            <ul class="nav-menu" id="nav-menu">
                 <li><a href="#" class="nav-link active" id="nav-gold" onclick="switchPage('gold'); return false;">黃金專區 🪙</a></li>
                 <li><a href="#" class="nav-link" id="nav-watchlist" onclick="switchPage('watchlist'); return false;">我的自選股 📈</a></li>
                 <li><span class="nav-link nav-link-disabled" title="日常儲蓄與省錢小撇步即將上線，敬請期待！">生活存錢法 🍕（即將推出）</span></li>
@@ -307,12 +312,13 @@
 
         <h2 class="section-title"><span class="section-title-icon">⭐</span> 我的自選股</h2>
         <div class="card" style="margin-bottom: 30px;">
-            <p class="card-subtext">
+            <button type="button" class="info-toggle">ⓘ 資料多久更新一次？清單存在哪裡？</button>
+            <p class="card-subtext info-content" hidden>
                 台股資料來源：台灣證券交易所公開資料，由網站背景排程（GitHub Actions）每 30 分鐘更新一次，不是逐秒即時報價；
                 美股與其他海外市場資料來源：Twelve Data，每 <span id="watchlist-refresh-note">60</span> 秒向你的瀏覽器更新一次。
                 清單只會存在「這個瀏覽器」裡，換裝置或清瀏覽器資料會重置。
             </p>
-            <form id="add-stock-form" class="add-stock-form">
+            <form id="add-stock-form" class="add-stock-form" style="margin-top:14px;">
                 <select id="add-stock-market" class="form-input add-stock-market">
                     <option value="TW">🇹🇼 台股</option>
                     <option value="US">🇺🇸 美股</option>
@@ -329,11 +335,13 @@
 
         <!-- Selected Stock Detail -->
         <div class="card" style="margin-bottom: 50px;" id="stock-detail-card">
-            <div style="display:flex; justify-content: space-between; align-items:center; flex-wrap: wrap; gap: 10px;">
-                <h3 id="detail-stock-title">股價走勢與換算</h3>
-                <span class="welcome-badge" id="detail-stock-badge" style="margin:0;">--</span>
+            <div class="stock-detail-head">
+                <div>
+                    <h3 id="detail-stock-title">股價走勢與換算</h3>
+                    <p class="card-subtext" id="detail-stock-asof" style="margin-bottom:0;"></p>
+                </div>
+                <div class="stock-price-hero" id="detail-stock-badge">--</div>
             </div>
-            <p class="card-subtext" id="detail-stock-asof"></p>
 
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 15px 0;">
                 <div class="stat-box"><span class="stat-label">開盤</span><div class="stat-value" id="detail-open">--</div></div>
@@ -342,12 +350,7 @@
                 <div class="stat-box"><span class="stat-label">最低</span><div class="stat-value" id="detail-low">--</div></div>
             </div>
 
-            <div style="height: 280px; position: relative; margin-bottom: 25px;">
-                <canvas id="stockChart"></canvas>
-            </div>
-            <p class="card-subtext" id="stock-chart-note"></p>
-
-            <div class="grid-2" style="margin-top: 20px;">
+            <div class="grid-2" style="margin-top: 10px; margin-bottom: 10px;">
                 <div class="form-group">
                     <label class="form-label" for="stock-calc-shares">輸入股數</label>
                     <div class="input-group">
@@ -362,14 +365,32 @@
                 </div>
             </div>
 
+            <!-- 分頁籤：走勢圖 / 高低點 / 新聞 / 法說會財報 / 籌碼（台股才有）。
+                 原本這幾塊資訊是從上到下一路堆疊，改成分頁籤讓畫面不會一次塞太多東西，
+                 找特定資訊也比較快。 -->
+            <div class="detail-tabs" id="detail-tabs" role="tablist">
+                <button type="button" class="detail-tab-btn active" data-tab="chart" role="tab">📈 走勢圖</button>
+                <button type="button" class="detail-tab-btn" data-tab="highlow" role="tab">📐 高低點</button>
+                <button type="button" class="detail-tab-btn" data-tab="news" role="tab">📰 新聞</button>
+                <button type="button" class="detail-tab-btn" data-tab="earnings" role="tab">📢 法說會財報</button>
+                <button type="button" class="detail-tab-btn" data-tab="chips" id="tab-btn-chips" role="tab" hidden>📊 籌碼</button>
+            </div>
+
+            <div class="detail-tab-panel active" id="tab-panel-chart" data-tab-panel="chart">
+                <div style="height: 280px; position: relative; margin-bottom: 15px;">
+                    <canvas id="stockChart"></canvas>
+                </div>
+                <p class="card-subtext" id="stock-chart-note"></p>
+            </div>
+
             <!-- 近期高低點參考資訊（台股/美股都會顯示）。
                  這裡只呈現客觀的價格區間數字，故意不做任何「該不該買」的建議，
                  詳見 README「近期高低點是怎麼算的」的說明。 -->
-            <div class="card" style="box-shadow:none; border:2px solid var(--bg-secondary); margin-top:25px;">
-                <h3 style="font-size:1.05rem;">📐 近期高低點參考</h3>
+            <div class="detail-tab-panel" id="tab-panel-highlow" data-tab-panel="highlow" hidden>
                 <p class="card-subtext" id="stock-highlow-note" style="margin-top:4px;"></p>
                 <div class="kv-table" id="stock-highlow-table"></div>
-                <p class="data-disclaimer" style="margin-top:12px;">
+                <button type="button" class="info-toggle">ⓘ 這是怎麼算的？不是買賣建議嗎？</button>
+                <p class="data-disclaimer info-content" hidden>
                     這裡只是客觀呈現「目前價位」跟「這段期間高低點」的差距，幫助你自己判斷，
                     不是買賣建議，也不代表股價接下來的走勢，投資決策請自行評估風險。
                 </p>
@@ -378,18 +399,26 @@
             <!-- 相關新聞：美股用 Finnhub 抓真實新聞（需要另外設定金鑰），
                  台股目前沒有可靠的免費新聞 API，改成提供搜尋捷徑連結。
                  詳見 README「重磅消息是怎麼來的」的說明。 -->
-            <div class="card" style="box-shadow:none; border:2px solid var(--bg-secondary); margin-top:20px;">
-                <h3 style="font-size:1.05rem;">📰 相關新聞</h3>
+            <div class="detail-tab-panel" id="tab-panel-news" data-tab-panel="news" hidden>
                 <div id="stock-news-section"><p class="card-subtext">載入中...</p></div>
             </div>
 
-            <!-- 台股專屬的籌碼資訊：本益比等 / 三大法人買賣超 / 融資融券餘額（美股不會顯示這塊） -->
-            <div id="tw-extra-info" hidden>
-                <p class="data-disclaimer" style="margin-top: 30px;">
-                    以下三項是台灣證交所的公開資料，欄位名稱直接使用證交所官方的中文報表標題。
+            <!-- 法說會與財報：點哪一檔股票就顯示哪一檔的資訊，取代原本只寫死台積電的新手包。
+                 美股用 Finnhub 的財報行事曆／財報實際-預估數字（需要另外設定金鑰）；
+                 台股沒有公開的法說會日程 API，改成比對證交所每日重大訊息公告，
+                 查到就顯示公告原文，查不到就誠實標示（詳見 README 說明）。 -->
+            <div class="detail-tab-panel" id="tab-panel-earnings" data-tab-panel="earnings" hidden>
+                <div id="stock-earnings-content"><p class="card-subtext">載入中...</p></div>
+            </div>
+
+            <!-- 台股專屬的籌碼資訊：本益比等 / 三大法人買賣超 / 融資融券餘額（美股不會顯示這個分頁） -->
+            <div class="detail-tab-panel" id="tab-panel-chips" data-tab-panel="chips" hidden>
+                <button type="button" class="info-toggle">ⓘ 這些欄位是什麼意思？</button>
+                <p class="data-disclaimer info-content" hidden>
+                    以下三項是台灣證交所的公開資料，欄位名稱直接使用證交所官方的中文報表標題（滑鼠移到欄位名稱上會有簡單說明）。
                     「查無資料」代表這次沒有抓到（可能是當日還沒公布、該股票不適用，或證交所調整了報表格式）。
                 </p>
-                <div class="grid-3" style="margin-bottom: 20px;" id="tw-extra-info-grid">
+                <div class="grid-3" style="margin-top: 15px;" id="tw-extra-info-grid">
                     <div class="card" style="box-shadow:none; border:2px solid var(--bg-secondary);">
                         <h3 style="font-size:1.05rem;">📊 本益比 / 殖利率 / 淨值比</h3>
                         <div class="kv-table" id="tw-valuation-table"></div>
@@ -404,44 +433,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- TSMC Featured Deep-dive (curated content, decoupled from live price feed) -->
-        <h2 class="section-title" id="events-section-title"><span class="section-title-icon">📢</span> 台積電新手包 (TSMC 101)</h2>
-        <div class="grid-2">
-            <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
-                <div>
-                    <span class="welcome-badge" style="background-color: var(--primary-light); color: var(--primary-dark); border-color: var(--primary-color);">📅 即將到來重大事件</span>
-                    <h3 id="earnings-title" style="margin-top: 10px;">載入中...</h3>
-                    <p class="card-subtext" id="earnings-desc" style="margin-top: 5px;"></p>
-                </div>
-
-                <div style="background: radial-gradient(circle, #FFF6E5 0%, #FFFDF9 100%); border-radius: 15px; padding: 25px; text-align: center; border: 3px dashed var(--primary-color);">
-                    <div style="font-size: 1.1rem; font-weight: 900; color: var(--text-main); margin-bottom: 10px;">⏳ 法說會倒數計時</div>
-                    <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 15px;">
-                        <div class="countdown-box"><div class="countdown-num" id="countdown-days">--</div><span class="countdown-label">天</span></div>
-                        <div class="countdown-box"><div class="countdown-num" id="countdown-hours">--</div><span class="countdown-label">時</span></div>
-                        <div class="countdown-box"><div class="countdown-num" id="countdown-mins">--</div><span class="countdown-label">分</span></div>
-                        <div class="countdown-box"><div class="countdown-num" id="countdown-secs" style="color: var(--accent-red);">--</div><span class="countdown-label">秒</span></div>
-                    </div>
-                    <div class="card-subtext" id="earnings-date" style="font-weight:700;">活動日期：載入中...</div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h3>台積電財報亮點指標</h3>
-                    <span class="welcome-badge" style="background-color: rgba(85, 239, 196, 0.2); color: #00b894; border-color: var(--accent-green); margin:0;" id="financials-quarter">--</span>
-                </div>
-                <p class="card-subtext">點選下方各項財報指標，了解這些神秘數字對台積電有何重要意義！這些內容為人工整理的財報重點，請以台積電官方公告為準。</p>
-                <div style="display: flex; flex-direction: column; gap: 12px;" id="tsmc-metrics-container">
-                    <div class="metric-item-card">載入指標數據中... 🌱</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="grid-3" id="tsmc-faq-container" style="margin-top: 30px;">
-            <div class="guide-card"><h3>載入新手觀念中... 🌱</h3></div>
         </div>
 
     </main>

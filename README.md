@@ -264,23 +264,42 @@ cute_invest_app/
 │   └── providers/
 │       ├── twse.js            讀取 data/tw_quotes.json 的台股資料邏輯
 │       ├── twelvedata.js      Twelve Data 資料（美股/黃金/匯率）
-│       └── news.js            個股新聞（美股用 Finnhub／台股用搜尋捷徑連結）
+│       ├── news.js            個股新聞（美股用 Finnhub／台股用搜尋捷徑連結）
+│       └── earnings.js        法說會與財報（美股用 Finnhub／台股比對重大訊息公告）
 ├── data/
-│   ├── tw_quotes.json         台股資料（由 GitHub Actions 排程自動更新，勿手動編輯）
-│   ├── tsmc_data.json         台積電新手包的教學內容（人工整理，非即時）
-│   └── bot_gold_prices.json   台銀實體金條/金幣參考牌價（人工整理，非即時）
+│   ├── tw_quotes.json                  台股報價資料（由 GitHub Actions 排程自動更新，勿手動編輯）
+│   ├── tw_earnings_announcements.json  台股法說會重大訊息比對結果（同上，自動疊加更新，勿手動編輯）
+│   └── bot_gold_prices.json            台銀實體金條/金幣參考牌價（人工整理，非即時）
 ├── scripts/
-│   └── fetch_tw_quotes.py     抓取台股官方資料、寫入 data/tw_quotes.json
+│   └── fetch_tw_quotes.py     抓取台股官方資料、寫入 data/tw_quotes.json 跟 data/tw_earnings_announcements.json
 ├── .github/workflows/
 │   └── update-tw-quotes.yml   每 30 分鐘自動執行上面那支程式的排程設定
 └── README.md                  就是這份文件
 ```
 
+## 每檔自選股新增了「法說會與財報」
+
+點開任何一檔自選股，「相關新聞」卡片下面會多一個「📢 法說會與財報」卡片：
+
+- **美股**：用 Finnhub 的免費方案，顯示上一次財報的實際 vs 預估 EPS，跟下一次
+  財報的預估日期（資料來源同「相關新聞」的 Finnhub 金鑰，見上面 Step 1.5）。
+- **台股**：證交所沒有公開的「法說會日程查詢 API」，改成讓
+  `scripts/fetch_tw_quotes.py` 每次執行時，順便比對當天證交所公布的「上市
+  公司重大訊息」，篩選出主旨或說明裡提到「法人說明會」「法說會」等關鍵字的
+  公告，依公司代號疊加存進 `data/tw_earnings_announcements.json`（每家公司
+  最多留最近 5 筆，用日期去重，不會越疊越大）。網頁查到就顯示證交所公告
+  原文，查不到就誠實顯示「還沒累積到」。
+
+**重要限制：** 這份資料本質上只能看到「今天」證交所公布了什麼，沒辦法回溯
+更早之前的公告。這代表剛加上這個功能的前幾個月，大部分台股很可能都還查不到
+東西——不是程式壞掉，是需要時間慢慢累積。用得越久，涵蓋的公司跟公告會越來
+越多。
+
 ## 之後可以再擴充的方向
 
 - 幫美股新增的股票也做「輸入代號時自動查公司全名 / 自動完成」的功能
   （目前美股是先直接接受你輸入的代號，正式報價回來後才會顯示公司名稱）。
-- `data/tsmc_data.json`、`data/bot_gold_prices.json` 建議每一季或每隔一段
-  時間手動更新一次內容/日期，才不會顯示過舊的資訊。
+- `data/bot_gold_prices.json` 建議每一季或每隔一段時間手動更新一次內容/
+  日期，才不會顯示過舊的資訊。
 - 如果之後想要「多裝置同步自選股」或「多人留言/分享」，需要加後端與登入功能，
   屆時可以考慮 Vercel + 一個簡單資料庫（例如 Supabase）。
