@@ -9,16 +9,22 @@
 # 伺服器」的程式先抓好資料、存成網站自己的檔案，網頁再讀取這個
 # 同網站底下的檔案，就不會有 CORS 問題了。
 #
-# 這支程式會抓四份證交所官方公開資料，並用股號 (Code) 合併成一份：
-#   1. STOCK_DAY_ALL  — 全部上市股票的每日收盤資訊（價格、開高低收）
-#   2. BWIBBU_ALL     — 全部上市股票的本益比、殖利率、股價淨值比
-#   3. T86            — 三大法人（外資／投信／自營商）買賣超
-#   4. MI_MARGN       — 融資融券餘額
+# 這支程式會抓四份證交所官方公開資料，並用股號合併成一份：
+#   1. STOCK_DAY_ALL — 全部上市股票的每日收盤資訊（價格、開高低收）
+#      來源：新版開放資料平台 openapi.twse.com.tw
+#   2. BWIBBU_ALL    — 全部上市股票的本益比、殖利率、股價淨值比
+#      來源：同上，openapi.twse.com.tw
+#   3. MI_MARGN      — 融資融券餘額
+#      來源：同上，openapi.twse.com.tw
+#   4. T86           — 三大法人（外資／投信／自營商）買賣超
+#      來源：證交所「舊版」報表系統 www.twse.com.tw（這份資料目前
+#      沒有在新版開放資料平台上），需要指定日期、且對程式化存取比較
+#      敏感，所以用比較貼近瀏覽器的方式去抓（詳見 fetch_institutional_t86）。
 #
-# 後面三份資料是「盡力而為」：證交所有時候會調整報表的欄位命名，
-# 這支程式抓不到某一份的時候不會讓整個流程失敗，只會跳過那份、
-# 在網站上顯示「查無資料」，其他資料（尤其是最重要的股價）還是
-# 會正常更新。
+# 後面三份資料是「盡力而為」：證交所有時候會調整報表的欄位命名，或是
+# 舊版系統可能會擋掉看起來像機器人的請求，這支程式抓不到某一份的時候
+# 不會讓整個流程失敗，只會跳過那份、在網站上顯示「查無資料」，其他資料
+# （尤其是最重要的股價）還是會正常更新。
 #
 # 什麼時候會用到這支程式？
 #   1. GitHub Actions 會自動、定期執行它（見
@@ -32,15 +38,21 @@ import json
 import sys
 import urllib.request
 import urllib.error
+import http.cookiejar
 from datetime import datetime, timedelta, timezone
 
 BASE_URL = "https://openapi.twse.com.tw/v1"
 ENDPOINTS = {
     "stock_day_all": f"{BASE_URL}/exchangeReport/STOCK_DAY_ALL",   # 每日收盤資訊（必要，抓不到就整個中止）
     "valuation": f"{BASE_URL}/exchangeReport/BWIBBU_ALL",          # 本益比／殖利率／股價淨值比
-    "institutional": f"{BASE_URL}/fund/T86",                       # 三大法人買賣超
     "margin": f"{BASE_URL}/exchangeReport/MI_MARGN",                # 融資融券餘額
 }
+
+# T86（三大法人買賣超）不在新版開放資料平台上，只能從舊版報表系統抓，
+# 而且必須指定「某一個交易日」的日期，沒有交易的那天會抓不到東西。
+T86_URL_TEMPLATE = "https://www.twse.com.tw/rwd/zh/fund/T86?date={date}&selectType=ALL&response=json"
+T86_REFERER_PAGE = "https://www.twse.com.tw/zh/trading/fund/T86.html"
+T86_MAX_DAYS_BACK = 10  # 遇到假日/國定假日時，最多往回試幾天
 
 OUTPUT_PATH = "data/tw_quotes.json"
 TAIPEI_OFFSET = timedelta(hours=8)
@@ -48,6 +60,25 @@ TAIPEI_OFFSET = timedelta(hours=8)
 # 不同報表的股號／股票名稱欄位命名不太一樣，依序嘗試這些候選欄位名稱
 CODE_KEY_CANDIDATES = ["Code", "證券代號", "股票代號", "SecuritiesCompanyCode"]
 NAME_KEY_CANDIDATES = ["Name", "證券名稱", "股票名稱"]
+
+# BWIBBU_ALL 的欄位是英文縮寫，直接顯示給非技術使用者看不好懂，
+# 這裡轉成白話中文標籤（其餘兩份報表本來就是證交所官方中文標題，不需要轉）。
+VALUATION_LABEL_MAP = {
+    "Date": "資料日期（民國年）",
+    "PEratio": "本益比",
+    "DividendYield": "殖利率 (%)",
+    "PBratio": "股價淨值比",
+}
+
+# 假裝成一般瀏覽器，降低被證交所舊版系統的防機器人機制擋下來的機率
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+}
 
 
 def fetch_json(url):
@@ -104,6 +135,11 @@ def strip_redundant_keys(row, code_key, name_key):
     return {k: v for k, v in row.items() if k not in (code_key, name_key)}
 
 
+def relabel(row, label_map):
+    """把英文/縮寫欄位名稱換成看得懂的中文標籤（沒有對應的維持原樣）。"""
+    return {label_map.get(k, k): v for k, v in row.items()}
+
+
 def fetch_optional(label, url):
     """抓「加分」資料（非股價本身）：失敗就回傳 None，不中止整個流程。"""
     try:
@@ -115,6 +151,65 @@ def fetch_optional(label, url):
     except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
         print(f"⚠️  抓取「{label}」失敗（{err}），這次略過，不影響其他資料。", file=sys.stderr)
         return None
+
+
+def fetch_institutional_t86():
+    """抓三大法人買賣超（T86）。
+
+    這份資料的兩個難點：
+    1. 不在新版開放資料平台上，只能用舊版報表系統的網址，而且一定要帶
+       「某一天」的日期，遇到週末/國定假日那天會抓不到東西，所以要從
+       今天（台北時間）開始，往回試最多 T86_MAX_DAYS_BACK 天。
+    2. 舊版系統對看起來像機器人的請求比較敏感，這裡刻意加上瀏覽器常見
+       的標頭，並先「熱身」造訪一次網頁本身（讓它願意發 cookie），
+       盡量提高抓成功的機率；就算熱身失敗，還是會照樣嘗試抓資料。
+    """
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+
+    try:
+        warmup_req = urllib.request.Request(T86_REFERER_PAGE, headers=BROWSER_HEADERS)
+        opener.open(warmup_req, timeout=20).read()
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+        # 熱身失敗不影響後面繼續嘗試，只是成功機率可能會低一點
+        pass
+
+    now_taipei = datetime.now(timezone.utc) + TAIPEI_OFFSET
+
+    for days_back in range(T86_MAX_DAYS_BACK):
+        target_date = now_taipei - timedelta(days=days_back)
+        date_str = target_date.strftime("%Y%m%d")
+        url = T86_URL_TEMPLATE.format(date=date_str)
+
+        try:
+            req = urllib.request.Request(
+                url, headers={**BROWSER_HEADERS, "Referer": T86_REFERER_PAGE}
+            )
+            with opener.open(req, timeout=30) as response:
+                raw = response.read()
+            payload = json.loads(raw.decode("utf-8"))
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
+            print(f"⚠️  「三大法人買賣超」（{date_str}）抓取失敗：{err}，改試前一天。", file=sys.stderr)
+            continue
+
+        if not isinstance(payload, dict) or not payload.get("data"):
+            # 不是回傳錯誤，只是那天沒有交易資料（例如假日），試更早一天即可
+            continue
+
+        fields = payload.get("fields") or []
+        if not fields:
+            print(f"⚠️  「三大法人買賣超」（{date_str}）回傳的資料沒有欄位名稱（fields），這次略過。", file=sys.stderr)
+            return None
+
+        rows = [dict(zip(fields, row)) for row in payload["data"]]
+        return rows
+
+    print(
+        f"⚠️  「三大法人買賣超」嘗試了最近 {T86_MAX_DAYS_BACK} 天都抓不到資料"
+        "（可能是證交所舊版系統擋掉了自動化請求，或是欄位/網址又調整了），這次略過，不影響其他資料。",
+        file=sys.stderr,
+    )
+    return None
 
 
 def main():
@@ -137,7 +232,7 @@ def main():
 
     # 2. 三份「加分」資料：本益比等、三大法人、融資融券。抓不到就跳過，不影響股價本身。
     valuation_rows = fetch_optional("本益比／殖利率／股價淨值比", ENDPOINTS["valuation"])
-    institutional_rows = fetch_optional("三大法人買賣超", ENDPOINTS["institutional"])
+    institutional_rows = fetch_institutional_t86()
     margin_rows = fetch_optional("融資融券餘額", ENDPOINTS["margin"])
 
     valuation_idx, v_code, v_name = index_by_code(valuation_rows or [], "本益比／殖利率／股價淨值比")
@@ -150,7 +245,8 @@ def main():
         code = stock.get(base_code_key)
 
         if code in valuation_idx:
-            stock["valuation_raw"] = strip_redundant_keys(valuation_idx[code], v_code, v_name)
+            cleaned = strip_redundant_keys(valuation_idx[code], v_code, v_name)
+            stock["valuation_raw"] = relabel(cleaned, VALUATION_LABEL_MAP)
             merged_count["valuation"] += 1
 
         if code in institutional_idx:
