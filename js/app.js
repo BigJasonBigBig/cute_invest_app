@@ -462,6 +462,7 @@ async function renderStockDetail(item) {
         } catch (err) {
             document.getElementById("detail-stock-title").textContent = `${item.name} (${item.symbol})`;
             document.getElementById("stock-chart-note").textContent = `暫時無法取得報價：${err.message}`;
+            document.getElementById("tw-extra-info").hidden = true;
             return;
         }
     }
@@ -478,6 +479,7 @@ async function renderStockDetail(item) {
     document.getElementById("detail-low").textContent = fmtMoney(quote.low, 2);
 
     const noteEl = document.getElementById("stock-chart-note");
+    const twExtraEl = document.getElementById("tw-extra-info");
     if (item.market === "TW") {
         const points = getTwStockHistoryPoints(item.symbol);
         drawChart("stockChart", "stockChartInstance", points, `${quote.name} (${item.symbol})`, "#74B9FF");
@@ -485,6 +487,11 @@ async function renderStockDetail(item) {
             points.length < 5
                 ? `台股走勢圖是每次你打開網站累積一筆真實收盤價，目前只有 ${points.length} 筆，持續使用會慢慢累積到 30 天喔！`
                 : `目前已累積 ${points.length} 筆真實收盤價（每天最多新增一筆）。`;
+
+        twExtraEl.hidden = false;
+        renderKvTable("tw-valuation-table", quote.valuationRaw);
+        renderKvTable("tw-institutional-table", quote.institutionalRaw);
+        renderKvTable("tw-margin-table", quote.marginRaw);
     } else {
         try {
             const points = await getTwelveDataHistory(item.symbol, 30);
@@ -493,10 +500,30 @@ async function renderStockDetail(item) {
         } catch (err) {
             noteEl.textContent = `目前無法取得歷史走勢：${err.message}`;
         }
+        twExtraEl.hidden = true; // 這三塊是台股專屬的公開資料，美股沒有對應資料源
     }
 
     runStockCalculator(quote, item.market);
     document.getElementById("stock-calc-shares").oninput = () => runStockCalculator(state.watchlistQuotes[key], item.market);
+}
+
+// 把證交所回傳的原始 key/value 物件畫成一個小表格。
+// 故意直接使用證交所官方報表的中文欄位名稱當標籤，不重新翻譯，
+// 這樣欄位名稱一定跟證交所公告的定義一致，不會因為我們自己亂翻譯而搞錯意思。
+function renderKvTable(containerId, rawObj) {
+    const container = document.getElementById(containerId);
+    if (!rawObj || Object.keys(rawObj).length === 0) {
+        container.innerHTML = `<div class="kv-empty">查無資料（可能當日尚未公布，或該股票不適用）</div>`;
+        return;
+    }
+
+    const rows = Object.entries(rawObj)
+        .map(([label, value]) => {
+            const displayValue = value === "" || value === null || value === undefined ? "--" : value;
+            return `<div class="kv-row"><span class="kv-label">${label}</span><span class="kv-value">${displayValue}</span></div>`;
+        })
+        .join("");
+    container.innerHTML = rows;
 }
 
 function runStockCalculator(quote, market) {

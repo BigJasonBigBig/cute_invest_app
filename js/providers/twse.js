@@ -77,7 +77,14 @@ async function fetchTwStockDaily(stockNo) {
         changePercent: prevClose ? (changeNum / prevClose) * 100 : 0,
         asOf: `交易日 ${row.Date || "--"}（資料抓取時間：${data.retrieved_at_taipei || data.retrieved_at || "未知"}）`,
         isRealtime: false,
-        source: "twse-daily-cached"
+        source: "twse-daily-cached",
+        // 額外的籌碼資訊（本益比等 / 三大法人 / 融資融券），由
+        // scripts/fetch_tw_quotes.py 用股號合併進來。證交所報表欄位
+        // 就是中文原始標題，這裡故意不重新命名，直接顯示給使用者看，
+        // 抓不到時會是 undefined，畫面上會顯示「查無資料」。
+        valuationRaw: row.valuation_raw || null,
+        institutionalRaw: row.institutional_raw || null,
+        marginRaw: row.margin_raw || null
     };
 }
 

@@ -361,6 +361,28 @@
                     <div style="font-size: 0.85rem; font-weight:700; color: var(--text-muted); margin-top: 5px;" id="stock-calc-note"></div>
                 </div>
             </div>
+
+            <!-- 台股專屬的籌碼資訊：本益比等 / 三大法人買賣超 / 融資融券餘額（美股不會顯示這塊） -->
+            <div id="tw-extra-info" hidden>
+                <p class="data-disclaimer" style="margin-top: 30px;">
+                    以下三項是台灣證交所的公開資料，欄位名稱直接使用證交所官方的中文報表標題。
+                    「查無資料」代表這次沒有抓到（可能是當日還沒公布、該股票不適用，或證交所調整了報表格式）。
+                </p>
+                <div class="grid-3" style="margin-bottom: 20px;" id="tw-extra-info-grid">
+                    <div class="card" style="box-shadow:none; border:2px solid var(--bg-secondary);">
+                        <h3 style="font-size:1.05rem;">📊 本益比 / 殖利率 / 淨值比</h3>
+                        <div class="kv-table" id="tw-valuation-table"></div>
+                    </div>
+                    <div class="card" style="box-shadow:none; border:2px solid var(--bg-secondary);">
+                        <h3 style="font-size:1.05rem;">🏦 三大法人買賣超</h3>
+                        <div class="kv-table" id="tw-institutional-table"></div>
+                    </div>
+                    <div class="card" style="box-shadow:none; border:2px solid var(--bg-secondary);">
+                        <h3 style="font-size:1.05rem;">💳 融資融券餘額</h3>
+                        <div class="kv-table" id="tw-margin-table"></div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- TSMC Featured Deep-dive (curated content, decoupled from live price feed) -->

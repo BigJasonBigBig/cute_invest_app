@@ -582,6 +582,47 @@ header {
     cursor: help;
 }
 
+/* Key-value info tables (三大法人 / 本益比 / 融資融券) */
+.kv-table {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 10px;
+    font-size: 0.85rem;
+}
+
+.kv-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--bg-secondary);
+}
+
+.kv-row:last-child {
+    border-bottom: none;
+}
+
+.kv-label {
+    color: var(--text-muted);
+    font-weight: 600;
+    flex-shrink: 0;
+}
+
+.kv-value {
+    font-weight: 800;
+    color: var(--text-main);
+    text-align: right;
+    word-break: break-all;
+}
+
+.kv-empty {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-style: italic;
+    margin-top: 10px;
+}
+
 /* Stock detail stats */
 .stat-box {
     background-color: var(--bg-secondary);
