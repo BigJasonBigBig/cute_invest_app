@@ -51,6 +51,16 @@ function fmtMoney(n, digits = 0) {
     return n.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 }
 
+// Twelve Data 免費方案「每分鐘 8 次」的額度很容易被用光，遇到這種狀況時
+// 顯示比較安心、看得懂的中文說明，而不是直接丟英文原始錯誤訊息給使用者看。
+function friendlyErrorMessage(rawMessage) {
+    if (!rawMessage) return rawMessage;
+    if (/run out of api credits|credits for the current minute/i.test(rawMessage)) {
+        return "Twelve Data 免費方案這一分鐘的用量已經用完了（免費方案限制：每分鐘最多 8 次），網站已經盡量快取資料減少用量，通常等 1 分鐘後重新整理網頁就會恢復正常，不是網站壞掉。";
+    }
+    return rawMessage;
+}
+
 function changeBadge(change, percent) {
     const sign = change >= 0 ? "+" : "";
     const dirClass = change >= 0 ? "up" : "down";
@@ -87,7 +97,7 @@ async function refreshGold() {
     } catch (err) {
         console.error("更新國際金價失敗：", err);
         errEl.textContent = hasApiKey()
-            ? `暫時無法取得國際金價：${err.message}`
+            ? `暫時無法取得國際金價：${friendlyErrorMessage(err.message)}`
             : "尚未設定 Twelve Data API 金鑰，請至 js/config.js 設定後即可看到真實金價。";
         errEl.hidden = false;
     }
@@ -129,7 +139,7 @@ async function loadGoldHistory() {
         drawChart("goldChart", "goldChartInstance", points, "國際金價 (USD/盎司)", "#FFB830");
         noteEl.textContent = "資料來源：Twelve Data 日線資料（近 30 個交易日）。";
     } catch (err) {
-        noteEl.textContent = `目前無法取得歷史金價走勢：${err.message}`;
+        noteEl.textContent = `目前無法取得歷史金價走勢：${friendlyErrorMessage(err.message)}`;
     }
 }
 
@@ -438,7 +448,7 @@ async function refreshWatchlistQuotes() {
                 delete state.watchlistErrors[key];
             } catch (err) {
                 console.error(`更新 ${item.symbol} 報價失敗：`, err.message);
-                state.watchlistErrors[key] = err.message;
+                state.watchlistErrors[key] = friendlyErrorMessage(err.message);
             }
         })
     );
@@ -461,7 +471,7 @@ async function renderStockDetail(item) {
             state.watchlistQuotes[key] = quote;
         } catch (err) {
             document.getElementById("detail-stock-title").textContent = `${item.name} (${item.symbol})`;
-            document.getElementById("stock-chart-note").textContent = `暫時無法取得報價：${err.message}`;
+            document.getElementById("stock-chart-note").textContent = `暫時無法取得報價：${friendlyErrorMessage(err.message)}`;
             document.getElementById("tw-extra-info").hidden = true;
             return;
         }
@@ -498,7 +508,7 @@ async function renderStockDetail(item) {
             drawChart("stockChart", "stockChartInstance", points, `${quote.name} (${item.symbol})`, "#74B9FF");
             noteEl.textContent = "資料來源：Twelve Data 日線資料（近 30 個交易日）。";
         } catch (err) {
-            noteEl.textContent = `目前無法取得歷史走勢：${err.message}`;
+            noteEl.textContent = `目前無法取得歷史走勢：${friendlyErrorMessage(err.message)}`;
         }
         twExtraEl.hidden = true; // 這三塊是台股專屬的公開資料，美股沒有對應資料源
     }
