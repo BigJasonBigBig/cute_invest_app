@@ -25,9 +25,11 @@
 #
 # data/tw_stock_history.json：
 #   5. STOCK_DAY     — 「單一個股、某個月份」的每日真實開高低收，
-#      只針對 TRACKED_TW_HISTORY_CODES 清單裡的股票抓（詳見
-#      update_tw_stock_history），讓台股走勢圖跟高低點分析可以用真正的
-#      歷史資料，不用只靠網站自己慢慢累積。
+#      只針對 tw_tracked_stocks.txt 這個清單裡的股票抓（詳見
+#      update_tw_stock_history / load_tracked_tw_codes），讓台股走勢圖
+#      跟高低點分析可以用真正的歷史資料，不用只靠網站自己慢慢累積。
+#      想追蹤新的台股，直接編輯 tw_tracked_stocks.txt 就好，不需要
+#      改這支程式。
 #
 # 後面幾份資料是「盡力而為」：證交所有時候會調整報表的欄位命名，或是
 # 舊版系統可能會擋掉看起來像機器人的請求，這支程式抓不到某一份的時候
@@ -73,16 +75,19 @@ T86_MAX_DAYS_BACK = 10  # 遇到假日/國定假日時，最多往回試幾天
 # ------------------------------------------------------------
 # 台股「真實」歷史股價（開高低收），來源：證交所 STOCK_DAY。
 # 這份資料也是只在舊版報表系統上，而且一次只能抓「一檔股票、一個月」，
-# 沒辦法像 STOCK_DAY_ALL 一樣一次抓全部股票，所以只針對下面這份清單裡
-# 的股票代號去抓真實歷史股價，避免排程對證交所發出太多請求。
+# 沒辦法像 STOCK_DAY_ALL 一樣一次抓全部股票，所以只針對「有追蹤」的
+# 股票代號去抓真實歷史股價，避免排程對證交所發出太多請求。
 #
-# 如果你在自選股清單裡加了其他台股、也想要那檔股票的真實歷史高低點，
-# 把股票代號加進下面這個清單就可以了（記得同步到 js/config.js 的
-# DEFAULT_WATCHLIST，讓預設清單一致）。沒有列在這裡的台股，走勢圖
-# 還是可以正常顯示，只是會改用「網站自己累積」的方式（見 twse.js 的
-# recordDailyHistoryPoint），從你開始使用這個新版網站那天算起。
+# 「有追蹤」的清單不是寫死在這支程式裡，而是讀取repo 根目錄的純文字檔
+# TRACKED_STOCKS_CONFIG_PATH（一行一個股票代號，可以用 # 加註解）。
+# 這樣你自己想追蹤新的台股時，只要編輯那個檔案存檔、用 GitHub Desktop
+# commit + push，排程下次執行就會自動抓，完全不需要改這支程式或再麻煩
+# 別人幫忙加。沒有列在清單裡的台股，走勢圖還是可以正常顯示，只是會改用
+# 「網站自己累積」的方式（見 twse.js 的 recordDailyHistoryPoint），
+# 從你開始使用這個新版網站那天算起。
 # ------------------------------------------------------------
-TRACKED_TW_HISTORY_CODES = ["2330"]
+TRACKED_STOCKS_CONFIG_PATH = "tw_tracked_stocks.txt"
+DEFAULT_TRACKED_TW_CODES = ["2330"]  # 找不到上面那個設定檔時，退回使用的預設清單
 STOCK_DAY_URL_TEMPLATE = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date={date}&stockNo={stock_no}&response=json"
 STOCK_DAY_REFERER_PAGE = "https://www.twse.com.tw/zh/afterTrading/STOCK_DAY"
 HISTORY_MONTHS_BACK = 3  # 抓最近幾個月（含當月）的真實每日資料，大約是一季
@@ -327,13 +332,40 @@ def fetch_stock_day_month(opener, stock_no, date_str):
     return points
 
 
+def load_tracked_tw_codes():
+    """讀取『使用者自己維護』的台股歷史股價追蹤清單（純文字檔，一行一個
+    股票代號，# 開頭或後面的文字當註解）。
+
+    這樣使用者以後想追蹤新的台股，只要自己編輯 TRACKED_STOCKS_CONFIG_PATH
+    這個檔案、存檔、commit + push 上去就好，不需要再請人改這支程式。
+    """
+    try:
+        with open(TRACKED_STOCKS_CONFIG_PATH, encoding="utf-8") as f:
+            lines = f.readlines()
+    except FileNotFoundError:
+        print(
+            f"⚠️  找不到 {TRACKED_STOCKS_CONFIG_PATH}，改用內建預設清單 {DEFAULT_TRACKED_TW_CODES}。"
+            "如果想要自訂追蹤哪些台股，可以自己建立這個檔案（一行一個股票代號）。",
+            file=sys.stderr,
+        )
+        return list(DEFAULT_TRACKED_TW_CODES)
+
+    codes = []
+    for line in lines:
+        code = line.split("#", 1)[0].strip()  # # 後面的文字當註解，忽略
+        if code:
+            codes.append(code)
+    return codes or list(DEFAULT_TRACKED_TW_CODES)
+
+
 def update_tw_stock_history():
     """更新台股「真實」歷史股價檔案（data/tw_stock_history.json）。
 
     跟法說會比對一樣，這個函式故意獨立於股價那份資料之外：就算這裡整個
     失敗，也絕對不能影響到 tw_quotes.json 的更新（股價是最重要的資料）。
     """
-    if not TRACKED_TW_HISTORY_CODES:
+    tracked_codes = load_tracked_tw_codes()
+    if not tracked_codes:
         return
 
     cookie_jar = http.cookiejar.CookieJar()
@@ -354,7 +386,7 @@ def update_tw_stock_history():
         by_code = {}
 
     updated_codes = []
-    for code in TRACKED_TW_HISTORY_CODES:
+    for code in tracked_codes:
         # 用日期當 key 保留舊資料，避免這次剛好某個月抓不到，就把之前已經
         # 抓到、存好的資料洗掉
         points_by_date = {p["date"]: p for p in by_code.get(code, {}).get("points", []) if p.get("date")}
@@ -370,23 +402,27 @@ def update_tw_stock_history():
             by_code[code] = {"points": sorted_points[-HISTORY_MAX_POINTS_PER_CODE:]}
             updated_codes.append(code)
 
+    # 清單裡如果拿掉了某檔股票的代號，順便把舊資料也清掉，檔案才不會一直
+    # 保留「已經沒在追蹤」的股票資料
+    by_code = {code: v for code, v in by_code.items() if code in tracked_codes}
+
     now_utc = datetime.now(timezone.utc)
     payload = {
         "updated_at": now_utc.isoformat().replace("+00:00", "Z"),
         "note": (
             "由 scripts/fetch_tw_quotes.py 定期從證交所 STOCK_DAY 抓取，"
             f"每檔股票涵蓋最近 {HISTORY_MONTHS_BACK} 個月的真實每日開高低收，"
-            "只有列在 TRACKED_TW_HISTORY_CODES 清單裡的股票才有這份資料，"
+            f"只有列在 {TRACKED_STOCKS_CONFIG_PATH} 清單裡的股票才有這份資料，"
             "其他台股會改用網站自己累積的走勢資料。"
         ),
-        "tracked_codes": TRACKED_TW_HISTORY_CODES,
+        "tracked_codes": tracked_codes,
         "by_code": by_code,
     }
     with open(HISTORY_OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False)
 
     print(
-        f"台股歷史股價更新完成：這次成功更新 {len(updated_codes)}/{len(TRACKED_TW_HISTORY_CODES)} "
+        f"台股歷史股價更新完成：這次成功更新 {len(updated_codes)}/{len(tracked_codes)} "
         "檔追蹤股票的真實歷史資料。"
     )
 

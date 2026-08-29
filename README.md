@@ -249,6 +249,33 @@ GitHub Pages 會自動重新部署。
 裡，換電腦或換瀏覽器不會同步（這是先前討論過的設計，之後如果想要「登入帳號、
 跨裝置同步」，需要另外加後端資料庫和登入功能，可以再跟我說）。
 
+## 台股要有「真實歷史股價」，需要多做一步
+
+美股（Twelve Data）本來就抓得到真實的歷史股價，但台股的歷史資料來源
+（證交所 `STOCK_DAY`）一次只能查「一檔股票」，沒辦法像抓當天報價那樣
+一次抓全部上市股票，所以只有 `tw_tracked_stocks.txt` 這個檔案裡列出的
+台股代號才會有真實歷史股價，其他台股會自動改用「網站自己累積」的方式
+（從你開始使用這個新版網站那天算起，需要時間慢慢累積）。
+
+想追蹤新的台股，不需要改任何程式碼，也不需要再麻煩別人：
+
+1. 打開 repo 根目錄的 `tw_tracked_stocks.txt`。
+2. 新增一行股票代號（例如 `2317`），`#` 後面可以加註解方便自己辨識。
+3. 存檔，用 GitHub Desktop commit + push。
+4. 排程（每 30 分鐘一次，或去 GitHub 網站的 Actions 分頁手動點
+   「Run workflow」立刻執行）下次執行時就會自動抓這檔股票最近 3 個月的
+   真實歷史股價，存進 `data/tw_stock_history.json`。
+
+不想再追蹤某檔股票，把那一行刪掉或用 `#` 註解掉即可，舊資料會在下次
+排程執行時自動清掉，不會一直留著沒用的資料。
+
+**這跟「我的自選股」清單是分開的兩件事：** 自選股清單存在你瀏覽器的
+`localStorage`（只有你看得到、不會同步到 GitHub），`tw_tracked_stocks.txt`
+則是「整個網站」共用的真實歷史股價追蹤清單（存在 repo 裡，所有訪客都會
+看到同一份）。想要哪一檔台股有真實歷史走勢，就把它加進這個檔案；至於你
+自己想關注哪些股票、要不要加進自選股清單，還是跟以前一樣自由選擇，兩者
+不會互相影響。
+
 ---
 
 ## 檔案結構
@@ -269,9 +296,11 @@ cute_invest_app/
 ├── data/
 │   ├── tw_quotes.json                  台股報價資料（由 GitHub Actions 排程自動更新，勿手動編輯）
 │   ├── tw_earnings_announcements.json  台股法說會重大訊息比對結果（同上，自動疊加更新，勿手動編輯）
+│   ├── tw_stock_history.json           台股真實歷史股價（同上，自動更新，勿手動編輯）
 │   └── bot_gold_prices.json            台銀實體金條/金幣參考牌價（人工整理，非即時）
+├── tw_tracked_stocks.txt      你自己維護：想追蹤真實歷史股價的台股代號清單
 ├── scripts/
-│   └── fetch_tw_quotes.py     抓取台股官方資料、寫入 data/tw_quotes.json 跟 data/tw_earnings_announcements.json
+│   └── fetch_tw_quotes.py     抓取台股官方資料，寫入上面 data/ 底下的檔案
 ├── .github/workflows/
 │   └── update-tw-quotes.yml   每 30 分鐘自動執行上面那支程式的排程設定
 └── README.md                  就是這份文件
