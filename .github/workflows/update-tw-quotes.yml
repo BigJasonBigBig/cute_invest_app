@@ -1,0 +1,43 @@
+name: Update TW Stock Quotes
+
+# 這個排程負責定期抓取台灣證交所的官方公開資料 (STOCK_DAY_ALL)，
+# 存成 data/tw_quotes.json 並且自動 commit 回這個 repository。
+# 網站本身只讀取這個檔案（同網站來源，沒有 CORS 問題），
+# 不會在使用者瀏覽器裡直接呼叫證交所的介面。
+
+on:
+  schedule:
+    # 每 30 分鐘執行一次（cron 是 UTC 時間，跟台北時間沒有直接對應關係，
+    # 這裡用「每 30 分鐘」的寫法最簡單，避免時區換算出錯）
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {} # 也可以到 GitHub 的 Actions 頁面手動點「Run workflow」立刻更新一次
+
+permissions:
+  contents: write
+
+jobs:
+  update-quotes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Fetch latest TWSE daily quotes
+        run: python3 scripts/fetch_tw_quotes.py
+
+      - name: Commit changes if data actually changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/tw_quotes.json
+          if git diff --cached --quiet; then
+            echo "資料沒有變化，不需要 commit。"
+          else
+            git commit -m "chore: 自動更新台股資料 ($(date -u +'%Y-%m-%d %H:%M UTC'))"
+            git push
+          fi

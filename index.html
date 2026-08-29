@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="可愛又好懂的理財新手網站！提供國際黃金報價、台股/美股自選股清單、互動計算機與夢想儲蓄計畫，輕鬆掌握投資入門觀念。">
+    <title>小資芽理財 🪙 可愛又簡單的投資入門站</title>
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js for beautiful graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- App configuration (API 金鑰等設定，請見這個檔案內的說明) -->
+    <script src="js/config.js"></script>
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header>
+        <div class="nav-container">
+            <a href="#" class="logo-section" onclick="switchPage('gold'); return false;">
+                <span class="logo-icon">🌱</span>
+                <span>小資芽理財</span>
+            </a>
+            <ul class="nav-menu">
+                <li><a href="#" class="nav-link active" id="nav-gold" onclick="switchPage('gold'); return false;">黃金專區 🪙</a></li>
+                <li><a href="#" class="nav-link" id="nav-watchlist" onclick="switchPage('watchlist'); return false;">我的自選股 📈</a></li>
+                <li><span class="nav-link nav-link-disabled" title="日常儲蓄與省錢小撇步即將上線，敬請期待！">生活存錢法 🍕（即將推出）</span></li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero-section">
+        <div class="hero-container">
+            <div class="hero-content">
+                <span class="welcome-badge" id="hero-badge">✨ 專為理財新手打造的避險入門課</span>
+                <h1 class="hero-title" id="hero-title">理財第一步！<br>跟著小芽認識 <span>國際黃金</span></h1>
+                <p class="hero-description" id="hero-desc">
+                    覺得投資很難、數字很冰冷嗎？別擔心！黃金是世界上最古老也最安穩的「避險守護神」。讓我們用最簡單、最可愛的方式，一起看懂金價波動，規劃你的第一筆黃金夢想基金吧！
+                </p>
+                <div class="hero-buttons">
+                    <a href="#dashboard" class="btn btn-primary" id="hero-btn-primary">看國際金價 📊</a>
+                    <a href="#guide" class="btn btn-secondary" id="hero-btn-secondary">黃金新手包 💡</a>
+                </div>
+            </div>
+
+            <div class="hero-graphic">
+                <div class="mascot-container">
+                    <!-- Cute SVG Golden Mascot -->
+                    <svg class="floating-mascot" width="100%" height="100%" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="100" cy="105" r="70" fill="url(#goldGlow)" opacity="0.6" filter="blur(5px)" />
+                        <circle cx="100" cy="100" r="75" fill="#FFD700" stroke="#E19A10" stroke-width="6" />
+                        <circle cx="100" cy="100" r="62" fill="none" stroke="#FFF6E5" stroke-dasharray="8 6" stroke-width="3" />
+                        <path d="M 65 65 L 50 30 L 80 50 Z" fill="#FFEAA7" stroke="#E19A10" stroke-width="4" stroke-linejoin="round" />
+                        <path d="M 135 65 L 150 30 L 120 50 Z" fill="#FFEAA7" stroke="#E19A10" stroke-width="4" stroke-linejoin="round" />
+                        <path d="M 62 60 L 53 38 L 72 50 Z" fill="#FF7675" />
+                        <path d="M 138 60 L 147 38 L 128 50 Z" fill="#FF7675" />
+                        <circle cx="100" cy="95" r="45" fill="#FFFDF9" stroke="#E19A10" stroke-width="4" />
+                        <circle cx="82" cy="90" r="6" fill="#2D3436" />
+                        <circle cx="118" cy="90" r="6" fill="#2D3436" />
+                        <circle cx="80" cy="88" r="2" fill="#FFFFFF" />
+                        <circle cx="116" cy="88" r="2" fill="#FFFFFF" />
+                        <circle cx="72" cy="102" r="6" fill="#FF7675" opacity="0.5" />
+                        <circle cx="128" cy="102" r="6" fill="#FF7675" opacity="0.5" />
+                        <path d="M 94 99 Q 97 103 100 99 Q 103 103 106 99" fill="none" stroke="#2D3436" stroke-width="3" stroke-linecap="round" />
+                        <polygon points="98,94 102,94 100,97" fill="#E19A10" />
+                        <circle cx="140" cy="115" r="12" fill="#FFFDF9" stroke="#E19A10" stroke-width="3" />
+                        <path d="M 134 110 L 146 120" stroke="#E19A10" stroke-width="2" />
+                        <circle cx="60" cy="115" r="12" fill="#FFFDF9" stroke="#E19A10" stroke-width="3" />
+                        <path d="M 100 50 Q 95 38 88 40 Q 95 44 100 50" fill="#55EFC4" stroke="#00b894" stroke-width="2" />
+                        <path d="M 100 50 Q 105 35 114 36 Q 107 42 100 50" fill="#55EFC4" stroke="#00b894" stroke-width="2" />
+                        <path d="M 100 50 L 100 56" stroke="#00b894" stroke-width="2" />
+                        <path d="M 30 50 L 33 43 L 40 40 L 33 37 L 30 30 L 27 37 L 20 40 L 27 43 Z" fill="#FFB830" />
+                        <path d="M 170 140 L 172 135 L 177 133 L 172 131 L 170 126 L 168 131 L 163 133 L 168 135 Z" fill="#FFD700" />
+                        <defs>
+                            <radialGradient id="goldGlow" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stop-color="#FFD700" />
+                                <stop offset="100%" stop-color="#FFFDF9" stop-opacity="0" />
+                            </radialGradient>
+                        </defs>
+                    </svg>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- API 金鑰尚未設定的提醒（有設定金鑰後會自動隱藏） -->
+    <div class="api-key-banner" id="api-key-banner" hidden>
+        ⚠️ 尚未設定 Twelve Data API 金鑰，美股報價、國際金價與匯率暫時無法顯示真實資料。
+        請打開 <code>js/config.js</code>，依照裡面的說明填入你的免費金鑰。台股資料不受影響，一樣是真實資料。
+    </div>
+
+    <!-- Main Content Area: 黃金專區 -->
+    <main class="main-container" id="dashboard">
+
+        <h2 class="section-title"><span class="section-title-icon">📈</span> 黃金看板與新手工具</h2>
+
+        <div class="grid-2">
+            <!-- Price Display Card -->
+            <div class="card">
+                <h3>國際即時金價</h3>
+                <p class="card-subtext">
+                    資料來源：Twelve Data（XAU/USD），<span id="gold-refresh-note">每 60 秒自動更新一次</span>。
+                </p>
+                <div class="price-display-wrapper">
+                    <div class="price-box">
+                        <div>
+                            <span class="price-title">美金報價 (盎司)</span>
+                            <div class="price-value" id="usd-price">--<span class="price-unit">USD/oz</span></div>
+                        </div>
+                        <div id="usd-change" class="price-change">載入中...</div>
+                    </div>
+                    <div class="price-box">
+                        <div>
+                            <span class="price-title">台幣報價 (台兩)</span>
+                            <div class="price-value" id="twd-price">--<span class="price-unit">TWD/兩</span></div>
+                        </div>
+                        <div id="twd-change" class="price-change">載入中...</div>
+                    </div>
+                </div>
+                <div class="update-indicator">
+                    <span class="pulse-dot"></span>
+                    <span id="update-time">最後更新時間：載入中...</span>
+                </div>
+                <div class="data-error" id="gold-error" hidden></div>
+            </div>
+
+            <!-- Interactive Gold Calculator Card -->
+            <div class="card">
+                <h3>黃金價值小幫手 🧮</h3>
+                <p class="card-subtext">輸入你想購買或擁有的黃金重量，幫你快速換算價值！</p>
+
+                <div class="form-group">
+                    <label class="form-label" for="calc-amount">輸入重量</label>
+                    <div class="input-group">
+                        <input type="number" id="calc-amount" class="form-input" value="1" min="0" step="any">
+                        <select id="calc-unit" class="input-suffix" style="border: none; background: transparent; font-weight:700; outline:none; cursor:pointer;">
+                            <option value="tael">台兩</option>
+                            <option value="gram">公克 (g)</option>
+                            <option value="oz">盎司 (oz)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="calc-result">
+                    <div class="card-subtext" style="margin-bottom: 5px;">估計總價值</div>
+                    <div class="calc-val" id="result-twd">-- TWD</div>
+                    <div style="font-size: 0.95rem; font-weight:700; margin-top: 5px;" id="result-usd">-- USD</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Historical Trend Card -->
+        <div class="card" style="margin-bottom: 50px;">
+            <h3>歷史趨勢圖 (近30日)</h3>
+            <p class="card-subtext" id="gold-chart-note">資料來源：Twelve Data 日線資料。</p>
+            <div style="height: 300px; position: relative;">
+                <canvas id="goldChart"></canvas>
+            </div>
+        </div>
+
+        <!-- BOT Real Rates Section -->
+        <div class="card" style="margin-bottom: 50px;" id="bot-physical-section">
+            <h3>🏦 臺灣銀行各類實體金條/金幣參考牌價</h3>
+            <p class="card-subtext" id="bot-prices-time">
+                載入中...
+            </p>
+            <p class="data-disclaimer">
+                ⚠️ 臺灣銀行目前沒有提供公開的即時牌價 API，這份表格是人工整理的「參考資料」，
+                僅供了解實體黃金與國際金價的價差概念，正式交易前請務必以
+                <a href="https://rate.bot.com.tw/gold" target="_blank" rel="noopener">臺灣銀行官方牌價頁面</a>
+                當下公告的價格為準。
+            </p>
+
+            <div class="sim-controls" style="margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-sm btn-primary" id="btn-tab-coins" style="background-color: var(--primary-color); color: white;" onclick="switchBotTab('coins')">🐨 澳洲袋鼠/楓葉金幣</button>
+                <button class="btn btn-sm btn-secondary" id="btn-tab-bars" onclick="switchBotTab('bars')">🧱 實體條塊與金鑽條塊</button>
+            </div>
+
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead>
+                        <tr style="border-bottom: 3px solid var(--primary-light); color: var(--text-main); font-weight: 900;">
+                            <th style="padding: 12px 10px;">商品名稱</th>
+                            <th style="padding: 12px 10px;">規格重量</th>
+                            <th style="padding: 12px 10px; text-align: right;">銀行賣出價 (台幣)</th>
+                            <th style="padding: 12px 10px; text-align: right;">銀行買回價 (台幣)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bot-prices-tbody">
+                        <tr>
+                            <td colspan="4" style="padding: 20px; text-align: center; color: var(--text-muted);">載入中... 🌱</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Savings Planner Section -->
+        <h2 class="section-title" id="planner"><span class="section-title-icon">🎯</span> 我的黃金存錢夢想</h2>
+        <div class="card" style="margin-bottom: 50px;">
+            <div class="grid-2" style="margin-bottom: 0; gap: 40px;">
+                <div>
+                    <h3>設定你的黃金目標</h3>
+                    <p class="card-subtext">積少成多！選擇你想達成的黃金目標，並輸入你目前的儲蓄，看看還差多少！</p>
+
+                    <div class="form-group">
+                        <label class="form-label" for="target-select">選擇目標物品</label>
+                        <select id="target-select" class="form-input">
+                            <option value="ring">精緻黃金小戒指 💍 (重 1 錢 / 0.1 兩)</option>
+                            <option value="bar">可愛小熊金條 🐻🪙 (重 10 公克 / 約 0.267 兩)</option>
+                            <option value="cup">大富大貴黃金杯 🏆 (重 1 兩)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="saved-amount">我目前的理財預算 (TWD)</label>
+                        <div class="input-group">
+                            <input type="number" id="saved-amount" class="form-input" value="3000" min="0" step="100">
+                            <span class="input-suffix">元 TWD</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; flex-direction: column; justify-content: center; background-color: var(--bg-secondary); border-radius:15px; padding: 25px; border: 3px dashed var(--primary-color);">
+                    <h4 style="font-size: 1.1rem; margin-bottom: 10px;">目標黃金市價預估：</h4>
+                    <div class="calc-val" id="target-cost-twd">-- TWD</div>
+
+                    <div class="planner-progress-bar">
+                        <div class="planner-progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div id="progress-percent-text" style="text-align: right; font-weight: 700; margin-top: 5px; font-size: 0.9rem; color: var(--primary-dark);">儲蓄進度：--%</div>
+
+                    <p id="planner-status-text" style="font-weight: 700; margin-top: 15px; text-align: center; color: var(--text-main);">載入中...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Beginner's Guide (Gold 101) -->
+        <h2 class="section-title" id="guide"><span class="section-title-icon">💡</span> 黃金投資新手包</h2>
+        <div class="grid-3">
+            <div class="guide-card">
+                <div class="guide-icon">🛡️</div>
+                <h3 class="guide-title">黃金為什麼能「避險」？</h3>
+                <p class="guide-text">
+                    黃金是實物，而且產量有限，不會像紙鈔一樣因為政府印太多而貶值。所以當發生戰爭、通貨膨脹或股市崩盤時，大家都想把錢換成黃金，金價就會上漲，這就是所謂的「避險」。
+                </p>
+            </div>
+            <div class="guide-card">
+                <div class="guide-icon">⚖️</div>
+                <h3 class="guide-title">常見的黃金重量單位</h3>
+                <p class="guide-text">
+                    國際上常用<strong>「盎司 (oz)」</strong>作為報價單位；在台灣的銀樓，則常用傳統的<strong>「兩、錢、分、厘」</strong>（十進位）；在銀行或科技業則常看到以<strong>「公克 (g)」</strong>計算。
+                    <br><span style="font-size: 0.85rem; color: var(--primary-dark); font-weight:700;">💡 1 兩 = 10 錢 = 37.5 公克</span>
+                </p>
+            </div>
+            <div class="guide-card">
+                <div class="guide-icon">🎒</div>
+                <h3 class="guide-title">新手有哪些投資管道？</h3>
+                <p class="guide-text">
+                    1. <strong>黃金存折</strong>：去銀行開戶，可以像存錢一樣每次買 1 公克，最適合小資族。<br>
+                    2. <strong>實體黃金</strong>：直接去銀樓或銀行買金條、金飾，可以摸得到，但有保管風險與工錢成本。<br>
+                    3. <strong>黃金 ETF</strong>：跟買股票一樣，在證券行買賣追蹤金價的基金。
+                </p>
+            </div>
+        </div>
+
+        <!-- Q&A Section -->
+        <div class="faq-section">
+            <h3 style="font-size: 1.5rem; font-weight: 900; margin-bottom: 25px; text-align: center;">🙋 新手常見黃金小疑惑</h3>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    <span>Q1：黃金會不會生利息？</span>
+                    <span class="faq-toggle-icon">▼</span>
+                </div>
+                <div class="faq-answer">
+                    黃金是<strong>不會生利息的</strong>喔！不像股票有配息、銀行存款有派息。投資黃金賺錢，唯一的管道是「低買高賣」賺取金價上漲的價差。因此，黃金通常適合作為資產配置的其中一部分（防禦用），而不建議把全部資產都壓在黃金上。
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    <span>Q2：金飾跟金條有什麼不一樣？</span>
+                    <span class="faq-toggle-icon">▼</span>
+                </div>
+                <div class="faq-answer">
+                    金飾（如戒指、項鍊）因為經過設計與加工，在購買時會加上一筆<strong>「工錢」</strong>，而且回收時銀樓通常會扣除部分損耗重。而金條、金塊通常是純粹的投資規格，工錢極低，最適合單純想投資的你！
+                </div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">
+                    <span>Q3：為什麼國際金價都寫美金？</span>
+                    <span class="faq-toggle-icon">▼</span>
+                </div>
+                <div class="faq-answer">
+                    因為美金是世界通用貨幣，黃金在國際市場上都是以<strong>「美金/盎司」</strong>計價。所以台灣的黃金價格除了受到金價本身波動影響外，也會受到<strong>台幣對美金匯率</strong>的影響喔！例如美金升值（台幣貶值）時，即便國際金價不動，換算成台幣的價格也會變貴。
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Main Content Area: 我的自選股 -->
+    <main class="main-container" id="watchlist-section" style="display: none;">
+
+        <h2 class="section-title"><span class="section-title-icon">⭐</span> 我的自選股</h2>
+        <div class="card" style="margin-bottom: 30px;">
+            <p class="card-subtext">
+                台股資料來源：台灣證券交易所公開資料，由網站背景排程（GitHub Actions）每 30 分鐘更新一次，不是逐秒即時報價；
+                美股與其他海外市場資料來源：Twelve Data，每 <span id="watchlist-refresh-note">60</span> 秒向你的瀏覽器更新一次。
+                清單只會存在「這個瀏覽器」裡，換裝置或清瀏覽器資料會重置。
+            </p>
+            <form id="add-stock-form" class="add-stock-form">
+                <select id="add-stock-market" class="form-input add-stock-market">
+                    <option value="TW">🇹🇼 台股</option>
+                    <option value="US">🇺🇸 美股</option>
+                </select>
+                <input type="text" id="add-stock-symbol" class="form-input add-stock-input" placeholder="輸入代號，例如 2330 或 AAPL">
+                <button type="submit" class="btn btn-primary">+ 加入自選股</button>
+            </form>
+            <div class="data-error" id="add-stock-error" hidden></div>
+        </div>
+
+        <div class="watchlist-grid" id="watchlist-grid">
+            <!-- 自選股卡片由 JS 動態產生 -->
+        </div>
+
+        <!-- Selected Stock Detail -->
+        <div class="card" style="margin-bottom: 50px;" id="stock-detail-card">
+            <div style="display:flex; justify-content: space-between; align-items:center; flex-wrap: wrap; gap: 10px;">
+                <h3 id="detail-stock-title">股價走勢與換算</h3>
+                <span class="welcome-badge" id="detail-stock-badge" style="margin:0;">--</span>
+            </div>
+            <p class="card-subtext" id="detail-stock-asof"></p>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 15px 0;">
+                <div class="stat-box"><span class="stat-label">開盤</span><div class="stat-value" id="detail-open">--</div></div>
+                <div class="stat-box"><span class="stat-label">昨收</span><div class="stat-value" id="detail-prev-close">--</div></div>
+                <div class="stat-box"><span class="stat-label">最高</span><div class="stat-value" id="detail-high">--</div></div>
+                <div class="stat-box"><span class="stat-label">最低</span><div class="stat-value" id="detail-low">--</div></div>
+            </div>
+
+            <div style="height: 280px; position: relative; margin-bottom: 25px;">
+                <canvas id="stockChart"></canvas>
+            </div>
+            <p class="card-subtext" id="stock-chart-note"></p>
+
+            <div class="grid-2" style="margin-top: 20px;">
+                <div class="form-group">
+                    <label class="form-label" for="stock-calc-shares">輸入股數</label>
+                    <div class="input-group">
+                        <input type="number" id="stock-calc-shares" class="form-input" value="10" min="1" step="1">
+                        <span class="input-suffix">股</span>
+                    </div>
+                </div>
+                <div class="calc-result" style="border-color: var(--accent-blue); background-color: #EBF8FF;">
+                    <div class="card-subtext" style="margin-bottom: 5px;">估計所需資金 (不含手續費)</div>
+                    <div class="calc-val" id="stock-result-value" style="color: #2B6CB0;">--</div>
+                    <div style="font-size: 0.85rem; font-weight:700; color: var(--text-muted); margin-top: 5px;" id="stock-calc-note"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TSMC Featured Deep-dive (curated content, decoupled from live price feed) -->
+        <h2 class="section-title" id="events-section-title"><span class="section-title-icon">📢</span> 台積電新手包 (TSMC 101)</h2>
+        <div class="grid-2">
+            <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+                <div>
+                    <span class="welcome-badge" style="background-color: var(--primary-light); color: var(--primary-dark); border-color: var(--primary-color);">📅 即將到來重大事件</span>
+                    <h3 id="earnings-title" style="margin-top: 10px;">載入中...</h3>
+                    <p class="card-subtext" id="earnings-desc" style="margin-top: 5px;"></p>
+                </div>
+
+                <div style="background: radial-gradient(circle, #FFF6E5 0%, #FFFDF9 100%); border-radius: 15px; padding: 25px; text-align: center; border: 3px dashed var(--primary-color);">
+                    <div style="font-size: 1.1rem; font-weight: 900; color: var(--text-main); margin-bottom: 10px;">⏳ 法說會倒數計時</div>
+                    <div style="display: flex; justify-content: center; gap: 15px; margin-bottom: 15px;">
+                        <div class="countdown-box"><div class="countdown-num" id="countdown-days">--</div><span class="countdown-label">天</span></div>
+                        <div class="countdown-box"><div class="countdown-num" id="countdown-hours">--</div><span class="countdown-label">時</span></div>
+                        <div class="countdown-box"><div class="countdown-num" id="countdown-mins">--</div><span class="countdown-label">分</span></div>
+                        <div class="countdown-box"><div class="countdown-num" id="countdown-secs" style="color: var(--accent-red);">--</div><span class="countdown-label">秒</span></div>
+                    </div>
+                    <div class="card-subtext" id="earnings-date" style="font-weight:700;">活動日期：載入中...</div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3>台積電財報亮點指標</h3>
+                    <span class="welcome-badge" style="background-color: rgba(85, 239, 196, 0.2); color: #00b894; border-color: var(--accent-green); margin:0;" id="financials-quarter">--</span>
+                </div>
+                <p class="card-subtext">點選下方各項財報指標，了解這些神秘數字對台積電有何重要意義！這些內容為人工整理的財報重點，請以台積電官方公告為準。</p>
+                <div style="display: flex; flex-direction: column; gap: 12px;" id="tsmc-metrics-container">
+                    <div class="metric-item-card">載入指標數據中... 🌱</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid-3" id="tsmc-faq-container" style="margin-top: 30px;">
+            <div class="guide-card"><h3>載入新手觀念中... 🌱</h3></div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-logo"><span>🌱</span> 小資芽理財</div>
+            <p style="font-size: 0.9rem; opacity: 0.7;">
+                用最簡單可愛的方式，陪伴大家邁出理財的第一步！自選股功能存在你的瀏覽器本機，換裝置需要重新加入喔 💖
+            </p>
+            <p style="font-size: 0.8rem; opacity: 0.5; margin-top: 10px;">
+                © 2026 小資芽理財. All rights reserved. 本站資訊僅供學習與練習使用，不構成投資建議。
+            </p>
+        </div>
+    </footer>
+
+    <!-- App Logic (ES module) -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
