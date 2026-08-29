@@ -329,8 +329,20 @@
             <div class="data-error" id="add-stock-error" hidden></div>
         </div>
 
-        <div class="watchlist-grid" id="watchlist-grid">
-            <!-- 自選股卡片由 JS 動態產生 -->
+        <div class="watchlist-group">
+            <h3 class="watchlist-group-title">🇹🇼 台股自選</h3>
+            <div class="watchlist-grid" id="watchlist-grid-tw">
+                <!-- 台股自選卡片由 JS 動態產生 -->
+            </div>
+            <p class="watchlist-empty-note" id="watchlist-empty-tw" hidden>目前還沒有加入任何台股，選上面的「台股」並輸入代號（例如 2330）試試看！</p>
+        </div>
+
+        <div class="watchlist-group">
+            <h3 class="watchlist-group-title">🇺🇸 美股自選</h3>
+            <div class="watchlist-grid" id="watchlist-grid-us">
+                <!-- 美股自選卡片由 JS 動態產生 -->
+            </div>
+            <p class="watchlist-empty-note" id="watchlist-empty-us" hidden>目前還沒有加入任何美股，選上面的「美股」並輸入代號（例如 AAPL）試試看！</p>
         </div>
 
         <!-- Selected Stock Detail -->

@@ -371,59 +371,67 @@ function watchlistKey(item) {
     return `${item.market}:${item.symbol}`;
 }
 
-function renderWatchlistGrid() {
-    const grid = document.getElementById("watchlist-grid");
-    grid.innerHTML = "";
+function buildWatchlistCard(item) {
+    const key = watchlistKey(item);
+    const quote = state.watchlistQuotes[key];
+    const card = document.createElement("div");
+    card.className = "watchlist-card";
+    if (state.selectedStock && watchlistKey(state.selectedStock) === key) {
+        card.classList.add("selected");
+    }
 
-    state.watchlist.forEach((item) => {
-        const key = watchlistKey(item);
-        const quote = state.watchlistQuotes[key];
-        const card = document.createElement("div");
-        card.className = "watchlist-card";
-        if (state.selectedStock && watchlistKey(state.selectedStock) === key) {
-            card.classList.add("selected");
-        }
+    const errorMsg = state.watchlistErrors[key];
 
-        const marketBadge = item.market === "TW" ? "🇹🇼 台股" : "🇺🇸 美股";
+    if (quote) {
+        const badge = changeBadge(quote.change, quote.changePercent);
+        card.innerHTML = `
+            <button class="watchlist-remove" title="移除" data-symbol="${item.symbol}" data-market="${item.market}">×</button>
+            <div class="watchlist-name">${quote.name || item.name}</div>
+            <div class="watchlist-symbol">${item.symbol}</div>
+            <div class="watchlist-price">${fmtMoney(quote.price, 2)}</div>
+            <div class="${badge.cls}">${badge.html}</div>
+        `;
+    } else if (errorMsg) {
+        card.innerHTML = `
+            <button class="watchlist-remove" title="移除" data-symbol="${item.symbol}" data-market="${item.market}">×</button>
+            <div class="watchlist-name">${item.name}</div>
+            <div class="watchlist-symbol">${item.symbol}</div>
+            <div class="watchlist-price-error" title="${errorMsg.replace(/"/g, "&quot;")}">⚠️ 無法取得報價</div>
+        `;
+    } else {
+        card.innerHTML = `
+            <button class="watchlist-remove" title="移除" data-symbol="${item.symbol}" data-market="${item.market}">×</button>
+            <div class="watchlist-name">${item.name}</div>
+            <div class="watchlist-symbol">${item.symbol}</div>
+            <div class="watchlist-price">載入中...</div>
+        `;
+    }
 
-        const errorMsg = state.watchlistErrors[key];
-
-        if (quote) {
-            const badge = changeBadge(quote.change, quote.changePercent);
-            card.innerHTML = `
-                <button class="watchlist-remove" title="移除" data-symbol="${item.symbol}" data-market="${item.market}">×</button>
-                <span class="watchlist-market-badge">${marketBadge}</span>
-                <div class="watchlist-name">${quote.name || item.name}</div>
-                <div class="watchlist-symbol">${item.symbol}</div>
-                <div class="watchlist-price">${fmtMoney(quote.price, 2)}</div>
-                <div class="${badge.cls}">${badge.html}</div>
-            `;
-        } else if (errorMsg) {
-            card.innerHTML = `
-                <button class="watchlist-remove" title="移除" data-symbol="${item.symbol}" data-market="${item.market}">×</button>
-                <span class="watchlist-market-badge">${marketBadge}</span>
-                <div class="watchlist-name">${item.name}</div>
-                <div class="watchlist-symbol">${item.symbol}</div>
-                <div class="watchlist-price-error" title="${errorMsg.replace(/"/g, "&quot;")}">⚠️ 無法取得報價</div>
-            `;
-        } else {
-            card.innerHTML = `
-                <button class="watchlist-remove" title="移除" data-symbol="${item.symbol}" data-market="${item.market}">×</button>
-                <span class="watchlist-market-badge">${marketBadge}</span>
-                <div class="watchlist-name">${item.name}</div>
-                <div class="watchlist-symbol">${item.symbol}</div>
-                <div class="watchlist-price">載入中...</div>
-            `;
-        }
-
-        card.addEventListener("click", (e) => {
-            if (e.target.classList.contains("watchlist-remove")) return;
-            selectStock(item);
-        });
-        grid.appendChild(card);
+    card.addEventListener("click", (e) => {
+        if (e.target.classList.contains("watchlist-remove")) return;
+        selectStock(item);
     });
+    return card;
+}
 
-    grid.querySelectorAll(".watchlist-remove").forEach((btn) => {
+function renderWatchlistGrid() {
+    const gridTw = document.getElementById("watchlist-grid-tw");
+    const gridUs = document.getElementById("watchlist-grid-us");
+    const emptyTw = document.getElementById("watchlist-empty-tw");
+    const emptyUs = document.getElementById("watchlist-empty-us");
+    gridTw.innerHTML = "";
+    gridUs.innerHTML = "";
+
+    const twItems = state.watchlist.filter((item) => item.market === "TW");
+    const usItems = state.watchlist.filter((item) => item.market !== "TW");
+
+    twItems.forEach((item) => gridTw.appendChild(buildWatchlistCard(item)));
+    usItems.forEach((item) => gridUs.appendChild(buildWatchlistCard(item)));
+
+    emptyTw.hidden = twItems.length > 0;
+    emptyUs.hidden = usItems.length > 0;
+
+    document.querySelectorAll(".watchlist-remove").forEach((btn) => {
         btn.addEventListener("click", (e) => {
             e.stopPropagation();
             const symbol = btn.dataset.symbol;
