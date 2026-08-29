@@ -16,6 +16,7 @@ import {
     removeFromWatchlist,
     fetchQuoteFor
 } from "./watchlist.js";
+import { hasFinnhubKey, getUsCompanyNews, buildNewsSearchLinks } from "./providers/news.js";
 
 const CFG = window.APP_CONFIG || {};
 const TAEL_TO_OZ = 1.2057; // 1 台兩 ≈ 1.2057 盎司 (37.5g / 31.1035g)
@@ -502,16 +503,21 @@ async function renderStockDetail(item) {
         renderKvTable("tw-valuation-table", quote.valuationRaw);
         renderKvTable("tw-institutional-table", quote.institutionalRaw);
         renderKvTable("tw-margin-table", quote.marginRaw);
+        renderHighLowCard(points, quote.price, "TW");
     } else {
+        let usPoints = [];
         try {
-            const points = await getTwelveDataHistory(item.symbol, 30);
-            drawChart("stockChart", "stockChartInstance", points, `${quote.name} (${item.symbol})`, "#74B9FF");
+            usPoints = await getTwelveDataHistory(item.symbol, 30);
+            drawChart("stockChart", "stockChartInstance", usPoints, `${quote.name} (${item.symbol})`, "#74B9FF");
             noteEl.textContent = "資料來源：Twelve Data 日線資料（近 30 個交易日）。";
         } catch (err) {
             noteEl.textContent = `目前無法取得歷史走勢：${friendlyErrorMessage(err.message)}`;
         }
         twExtraEl.hidden = true; // 這三塊是台股專屬的公開資料，美股沒有對應資料源
+        renderHighLowCard(usPoints, quote.price, "US");
     }
+
+    renderNewsSection(item, quote);
 
     runStockCalculator(quote, item.market);
     document.getElementById("stock-calc-shares").oninput = () => runStockCalculator(state.watchlistQuotes[key], item.market);
@@ -534,6 +540,112 @@ function renderKvTable(containerId, rawObj) {
         })
         .join("");
     container.innerHTML = rows;
+}
+
+// ------------------------------------------------------------
+// 近期高低點參考資訊（不是投資建議，只是客觀的價格區間數字）
+// ------------------------------------------------------------
+function computeHighLowStats(points, currentPrice) {
+    if (!points || points.length === 0 || !Number.isFinite(currentPrice)) return null;
+    const prices = points.map((p) => p.price).filter((p) => Number.isFinite(p));
+    if (prices.length === 0) return null;
+
+    // 把「今天」的價格也算進區間裡，這樣「創新高/新低」才會包含最新這筆
+    const periodHigh = Math.max(...prices, currentPrice);
+    const periodLow = Math.min(...prices, currentPrice);
+    const days = new Set(points.map((p) => p.date)).size;
+
+    return {
+        days,
+        periodHigh,
+        periodLow,
+        belowHighPct: periodHigh ? ((periodHigh - currentPrice) / periodHigh) * 100 : 0,
+        aboveLowPct: periodLow ? ((currentPrice - periodLow) / periodLow) * 100 : 0,
+        isNewHigh: currentPrice >= periodHigh,
+        isNewLow: currentPrice <= periodLow
+    };
+}
+
+function renderHighLowCard(points, currentPrice, market) {
+    const noteEl = document.getElementById("stock-highlow-note");
+    const tableEl = document.getElementById("stock-highlow-table");
+    const stats = computeHighLowStats(points, currentPrice);
+    const unit = market === "TW" ? "TWD" : "USD";
+
+    if (!stats || stats.days < 3) {
+        noteEl.textContent = "";
+        tableEl.innerHTML = `<div class="kv-empty">目前累積的價格資料還太少（僅 ${stats ? stats.days : 0} 筆），持續使用一段時間後就能看到高低點分析。</div>`;
+        return;
+    }
+
+    noteEl.textContent = `統計範圍：目前已累積的近 ${stats.days} 個交易日資料`;
+
+    const highLine = stats.isNewHigh
+        ? `🚀 目前價位就是這段期間的最高價（創近 ${stats.days} 日新高）`
+        : `低於期間最高價 ${fmtMoney(stats.belowHighPct, 1)}%`;
+    const lowLine = stats.isNewLow
+        ? `📉 目前價位就是這段期間的最低價（創近 ${stats.days} 日新低）`
+        : `高於期間最低價 ${fmtMoney(stats.aboveLowPct, 1)}%`;
+
+    tableEl.innerHTML = `
+        <div class="kv-row"><span class="kv-label">期間最高價</span><span class="kv-value">${fmtMoney(stats.periodHigh, 2)} ${unit}</span></div>
+        <div class="kv-row"><span class="kv-label">期間最低價</span><span class="kv-value">${fmtMoney(stats.periodLow, 2)} ${unit}</span></div>
+        <div class="kv-row"><span class="kv-label">目前價位 vs 最高</span><span class="kv-value">${highLine}</span></div>
+        <div class="kv-row"><span class="kv-label">目前價位 vs 最低</span><span class="kv-value">${lowLine}</span></div>
+    `;
+}
+
+// ------------------------------------------------------------
+// 相關新聞
+// ------------------------------------------------------------
+function renderSearchLinkList(container, links) {
+    container.innerHTML = links
+        .map((l) => `<div class="news-item"><a href="${l.url}" target="_blank" rel="noopener noreferrer">${l.label}</a></div>`)
+        .join("");
+}
+
+async function renderNewsSection(item, quote) {
+    const container = document.getElementById("stock-news-section");
+    if (!container) return;
+    const displayName = quote && quote.name ? quote.name : item.name || item.symbol;
+
+    if (item.market === "TW") {
+        container.innerHTML = `
+            <p class="card-subtext">台股目前沒有找到「免費、可以直接從網頁抓取」的個股新聞 API，先提供搜尋捷徑，一鍵幫你查最新消息：</p>
+        `;
+        const linksEl = document.createElement("div");
+        renderSearchLinkList(linksEl, buildNewsSearchLinks(displayName, item.symbol));
+        container.appendChild(linksEl);
+        return;
+    }
+
+    if (!hasFinnhubKey()) {
+        container.innerHTML = `<p class="card-subtext">尚未設定 Finnhub 新聞金鑰（選填，見 js/config.js 說明），先提供搜尋捷徑：</p>`;
+        const linksEl = document.createElement("div");
+        renderSearchLinkList(linksEl, buildNewsSearchLinks(displayName));
+        container.appendChild(linksEl);
+        return;
+    }
+
+    container.innerHTML = `<p class="card-subtext">載入新聞中...</p>`;
+    try {
+        const news = await getUsCompanyNews(item.symbol);
+        if (news.length === 0) {
+            container.innerHTML = `<p class="card-subtext">最近 7 天內查無 ${item.symbol} 的相關新聞（資料來源：Finnhub）。</p>`;
+            return;
+        }
+        container.innerHTML = news
+            .map(
+                (n) => `
+            <div class="news-item">
+                <a href="${n.url}" target="_blank" rel="noopener noreferrer">${n.headline}</a>
+                <div class="news-meta">${n.source}${n.datetime ? " · " + n.datetime.toLocaleDateString("zh-TW") : ""}</div>
+            </div>`
+            )
+            .join("");
+    } catch (err) {
+        container.innerHTML = `<p class="card-subtext">暫時無法取得新聞：${friendlyErrorMessage(err.message)}</p>`;
+    }
 }
 
 function runStockCalculator(quote, market) {

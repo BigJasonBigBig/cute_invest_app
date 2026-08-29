@@ -362,6 +362,27 @@
                 </div>
             </div>
 
+            <!-- 近期高低點參考資訊（台股/美股都會顯示）。
+                 這裡只呈現客觀的價格區間數字，故意不做任何「該不該買」的建議，
+                 詳見 README「近期高低點是怎麼算的」的說明。 -->
+            <div class="card" style="box-shadow:none; border:2px solid var(--bg-secondary); margin-top:25px;">
+                <h3 style="font-size:1.05rem;">📐 近期高低點參考</h3>
+                <p class="card-subtext" id="stock-highlow-note" style="margin-top:4px;"></p>
+                <div class="kv-table" id="stock-highlow-table"></div>
+                <p class="data-disclaimer" style="margin-top:12px;">
+                    這裡只是客觀呈現「目前價位」跟「這段期間高低點」的差距，幫助你自己判斷，
+                    不是買賣建議，也不代表股價接下來的走勢，投資決策請自行評估風險。
+                </p>
+            </div>
+
+            <!-- 相關新聞：美股用 Finnhub 抓真實新聞（需要另外設定金鑰），
+                 台股目前沒有可靠的免費新聞 API，改成提供搜尋捷徑連結。
+                 詳見 README「重磅消息是怎麼來的」的說明。 -->
+            <div class="card" style="box-shadow:none; border:2px solid var(--bg-secondary); margin-top:20px;">
+                <h3 style="font-size:1.05rem;">📰 相關新聞</h3>
+                <div id="stock-news-section"><p class="card-subtext">載入中...</p></div>
+            </div>
+
             <!-- 台股專屬的籌碼資訊：本益比等 / 三大法人買賣超 / 融資融券餘額（美股不會顯示這塊） -->
             <div id="tw-extra-info" hidden>
                 <p class="data-disclaimer" style="margin-top: 30px;">
