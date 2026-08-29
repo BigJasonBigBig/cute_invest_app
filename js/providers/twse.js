@@ -23,15 +23,27 @@
 // 這代表台股報價不是「你每次打開網頁都重新抓一次」，而是「整個網站
 // 背景每 30 分鐘更新一次大家共用的一份資料」，畫面上會誠實顯示
 // 這份資料是什麼時候抓的。
+//
+// 走勢圖用的歷史股價分兩種來源：
+//   1. 真實歷史股價（data/tw_stock_history.json）：一樣是背景排程從
+//      證交所抓的，但只有少數幾檔「有在追蹤」的股票有這份資料（見
+//      scripts/fetch_tw_quotes.py 的 TRACKED_TW_HISTORY_CODES）。
+//   2. 本機累積（localStorage）：沒有真實歷史資料的股票，改成每次你
+//      打開網站，把當下的報價存一筆下來，隨著時間慢慢累積出走勢。
 // ============================================================
 
 const LOCAL_QUOTES_URL = "data/tw_quotes.json";
+const REAL_HISTORY_URL = "data/tw_stock_history.json";
 const HISTORY_STORAGE_KEY = "tw_stock_history_v1";
 const HISTORY_MAX_POINTS = 30;
 
 let _cache = null;
 let _cacheFetchedAt = 0;
 const CACHE_TTL_MS = 60 * 1000;
+
+let _realHistoryCache = null;
+let _realHistoryFetchedAt = 0;
+const REAL_HISTORY_CACHE_TTL_MS = 5 * 60 * 1000; // 這份資料排程每次執行才會變，不用跟報價一樣頻繁重讀
 
 async function loadLocalQuotes() {
     const now = Date.now();
@@ -133,6 +145,43 @@ function recordDailyHistoryPoint(stockNo, price) {
 export function getTwStockHistoryPoints(stockNo) {
     const store = loadHistoryStore();
     return store[stockNo] || [];
+}
+
+// ------------------------------------------------------------
+// 真實歷史股價（來自證交所 STOCK_DAY，由 scripts/fetch_tw_quotes.py
+// 排程抓好存成 data/tw_stock_history.json）。
+// 只有列在該腳本 TRACKED_TW_HISTORY_CODES 清單裡的股票才有這份資料，
+// 其他台股呼叫這個函式會回傳 null，呼叫端要自己改用
+// getTwStockHistoryPoints()（本機累積）當備援。
+// ------------------------------------------------------------
+async function loadRealHistoryFile() {
+    const now = Date.now();
+    if (_realHistoryCache && now - _realHistoryFetchedAt < REAL_HISTORY_CACHE_TTL_MS) {
+        return _realHistoryCache;
+    }
+    try {
+        const res = await fetch(`${REAL_HISTORY_URL}?_=${Date.now()}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        _realHistoryCache = data;
+        _realHistoryFetchedAt = now;
+        return data;
+    } catch {
+        // 檔案還不存在（例如排程還沒執行過第一次）或格式不對時，
+        // 安靜地回傳 null，讓呼叫端自動改用本機累積的資料，不影響網站運作
+        return null;
+    }
+}
+
+export async function getTwRealHistoryPoints(stockNo) {
+    const data = await loadRealHistoryFile();
+    const entry = data && data.by_code && data.by_code[stockNo];
+    const rawPoints = entry && Array.isArray(entry.points) ? entry.points : [];
+    if (rawPoints.length === 0) return null;
+
+    return rawPoints
+        .filter((p) => Number.isFinite(p.close))
+        .map((p) => ({ date: p.date, price: p.close, high: p.high, low: p.low }));
 }
 
 // 用股號查中文名稱（新增自選股時，自動帶入公司名稱用）

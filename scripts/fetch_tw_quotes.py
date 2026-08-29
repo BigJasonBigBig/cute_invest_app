@@ -9,7 +9,9 @@
 # 伺服器」的程式先抓好資料、存成網站自己的檔案，網頁再讀取這個
 # 同網站底下的檔案，就不會有 CORS 問題了。
 #
-# 這支程式會抓四份證交所官方公開資料，並用股號合併成一份：
+# 這支程式會抓證交所官方公開資料，寫成兩份檔案：
+#
+# data/tw_quotes.json（用股號合併四份報表）：
 #   1. STOCK_DAY_ALL — 全部上市股票的每日收盤資訊（價格、開高低收）
 #      來源：新版開放資料平台 openapi.twse.com.tw
 #   2. BWIBBU_ALL    — 全部上市股票的本益比、殖利率、股價淨值比
@@ -21,7 +23,13 @@
 #      沒有在新版開放資料平台上），需要指定日期、且對程式化存取比較
 #      敏感，所以用比較貼近瀏覽器的方式去抓（詳見 fetch_institutional_t86）。
 #
-# 後面三份資料是「盡力而為」：證交所有時候會調整報表的欄位命名，或是
+# data/tw_stock_history.json：
+#   5. STOCK_DAY     — 「單一個股、某個月份」的每日真實開高低收，
+#      只針對 TRACKED_TW_HISTORY_CODES 清單裡的股票抓（詳見
+#      update_tw_stock_history），讓台股走勢圖跟高低點分析可以用真正的
+#      歷史資料，不用只靠網站自己慢慢累積。
+#
+# 後面幾份資料是「盡力而為」：證交所有時候會調整報表的欄位命名，或是
 # 舊版系統可能會擋掉看起來像機器人的請求，這支程式抓不到某一份的時候
 # 不會讓整個流程失敗，只會跳過那份、在網站上顯示「查無資料」，其他資料
 # （尤其是最重要的股價）還是會正常更新。
@@ -61,6 +69,25 @@ EARNINGS_MAX_PER_CODE = 5  # 每家公司最多保留幾筆比對到的公告
 T86_URL_TEMPLATE = "https://www.twse.com.tw/rwd/zh/fund/T86?date={date}&selectType=ALL&response=json"
 T86_REFERER_PAGE = "https://www.twse.com.tw/zh/trading/fund/T86.html"
 T86_MAX_DAYS_BACK = 10  # 遇到假日/國定假日時，最多往回試幾天
+
+# ------------------------------------------------------------
+# 台股「真實」歷史股價（開高低收），來源：證交所 STOCK_DAY。
+# 這份資料也是只在舊版報表系統上，而且一次只能抓「一檔股票、一個月」，
+# 沒辦法像 STOCK_DAY_ALL 一樣一次抓全部股票，所以只針對下面這份清單裡
+# 的股票代號去抓真實歷史股價，避免排程對證交所發出太多請求。
+#
+# 如果你在自選股清單裡加了其他台股、也想要那檔股票的真實歷史高低點，
+# 把股票代號加進下面這個清單就可以了（記得同步到 js/config.js 的
+# DEFAULT_WATCHLIST，讓預設清單一致）。沒有列在這裡的台股，走勢圖
+# 還是可以正常顯示，只是會改用「網站自己累積」的方式（見 twse.js 的
+# recordDailyHistoryPoint），從你開始使用這個新版網站那天算起。
+# ------------------------------------------------------------
+TRACKED_TW_HISTORY_CODES = ["2330"]
+STOCK_DAY_URL_TEMPLATE = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY?date={date}&stockNo={stock_no}&response=json"
+STOCK_DAY_REFERER_PAGE = "https://www.twse.com.tw/zh/afterTrading/STOCK_DAY"
+HISTORY_MONTHS_BACK = 3  # 抓最近幾個月（含當月）的真實每日資料，大約是一季
+HISTORY_OUTPUT_PATH = "data/tw_stock_history.json"
+HISTORY_MAX_POINTS_PER_CODE = 130  # 大約半年份的交易日上限，避免檔案無限長大
 
 OUTPUT_PATH = "data/tw_quotes.json"
 TAIPEI_OFFSET = timedelta(hours=8)
@@ -218,6 +245,150 @@ def fetch_institutional_t86():
         file=sys.stderr,
     )
     return None
+
+
+def roc_date_to_ad(roc_date_str):
+    """把證交所常見的民國年日期字串（例如 "115/08/03"）轉成西元日期字串
+    "2026-08-03"（方便跟其他資料來源、前端統一格式比較）。"""
+    parts = str(roc_date_str).split("/")
+    if len(parts) != 3:
+        raise ValueError(f"unexpected date format: {roc_date_str}")
+    roc_year, month, day = parts
+    ad_year = int(roc_year) + 1911
+    return f"{ad_year:04d}-{int(month):02d}-{int(day):02d}"
+
+
+def parse_tw_number(raw):
+    """把證交所數字欄位轉成 float：可能有千分位逗號，或用「--」代表當天
+    沒有成交，轉不出來就回傳 None（前端會顯示成「當天無資料」，
+    不會誤植成 0，符合「絕不捏造資料」的原則）。"""
+    if raw is None:
+        return None
+    cleaned = str(raw).replace(",", "").strip()
+    if cleaned in ("", "--"):
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def _recent_month_starts(n_months, now_taipei):
+    """回傳最近 n_months 個月份的「該月 1 號」日期字串 (YYYYMMDD)，由舊到新
+    排序。證交所 STOCK_DAY 只看年月，日期用 1 號即可代表整個月份。"""
+    results = []
+    year, month = now_taipei.year, now_taipei.month
+    for _ in range(n_months):
+        results.append(f"{year:04d}{month:02d}01")
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    return list(reversed(results))
+
+
+def fetch_stock_day_month(opener, stock_no, date_str):
+    """抓「單一個股、某個月份」的每日真實開高低收（STOCK_DAY）。"""
+    url = STOCK_DAY_URL_TEMPLATE.format(date=date_str, stock_no=stock_no)
+    try:
+        req = urllib.request.Request(
+            url, headers={**BROWSER_HEADERS, "Referer": STOCK_DAY_REFERER_PAGE}
+        )
+        with opener.open(req, timeout=30) as response:
+            raw = response.read()
+        payload = json.loads(raw.decode("utf-8"))
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
+        print(f"⚠️  抓取 {stock_no} 在 {date_str[:6]} 月份的歷史股價失敗：{err}，這次略過。", file=sys.stderr)
+        return []
+
+    if not isinstance(payload, dict) or not payload.get("data"):
+        # 不是回傳錯誤，可能只是還沒有那個月份的資料（例如當月才剛開始）
+        return []
+
+    fields = payload.get("fields") or []
+    if not fields:
+        return []
+
+    rows = [dict(zip(fields, row)) for row in payload["data"]]
+    points = []
+    for row in rows:
+        try:
+            points.append(
+                {
+                    "date": roc_date_to_ad(row.get("日期", "")),
+                    "open": parse_tw_number(row.get("開盤價")),
+                    "high": parse_tw_number(row.get("最高價")),
+                    "low": parse_tw_number(row.get("最低價")),
+                    "close": parse_tw_number(row.get("收盤價")),
+                }
+            )
+        except (ValueError, TypeError):
+            continue
+    return points
+
+
+def update_tw_stock_history():
+    """更新台股「真實」歷史股價檔案（data/tw_stock_history.json）。
+
+    跟法說會比對一樣，這個函式故意獨立於股價那份資料之外：就算這裡整個
+    失敗，也絕對不能影響到 tw_quotes.json 的更新（股價是最重要的資料）。
+    """
+    if not TRACKED_TW_HISTORY_CODES:
+        return
+
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    try:
+        warmup_req = urllib.request.Request(STOCK_DAY_REFERER_PAGE, headers=BROWSER_HEADERS)
+        opener.open(warmup_req, timeout=20).read()
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+        pass
+
+    now_taipei = datetime.now(timezone.utc) + TAIPEI_OFFSET
+    month_dates = _recent_month_starts(HISTORY_MONTHS_BACK, now_taipei)
+
+    try:
+        with open(HISTORY_OUTPUT_PATH, encoding="utf-8") as f:
+            by_code = json.load(f).get("by_code", {})
+    except (FileNotFoundError, ValueError):
+        by_code = {}
+
+    updated_codes = []
+    for code in TRACKED_TW_HISTORY_CODES:
+        # 用日期當 key 保留舊資料，避免這次剛好某個月抓不到，就把之前已經
+        # 抓到、存好的資料洗掉
+        points_by_date = {p["date"]: p for p in by_code.get(code, {}).get("points", []) if p.get("date")}
+
+        got_any = False
+        for date_str in month_dates:
+            for p in fetch_stock_day_month(opener, code, date_str):
+                got_any = True
+                points_by_date[p["date"]] = p
+
+        if got_any:
+            sorted_points = sorted(points_by_date.values(), key=lambda p: p["date"])
+            by_code[code] = {"points": sorted_points[-HISTORY_MAX_POINTS_PER_CODE:]}
+            updated_codes.append(code)
+
+    now_utc = datetime.now(timezone.utc)
+    payload = {
+        "updated_at": now_utc.isoformat().replace("+00:00", "Z"),
+        "note": (
+            "由 scripts/fetch_tw_quotes.py 定期從證交所 STOCK_DAY 抓取，"
+            f"每檔股票涵蓋最近 {HISTORY_MONTHS_BACK} 個月的真實每日開高低收，"
+            "只有列在 TRACKED_TW_HISTORY_CODES 清單裡的股票才有這份資料，"
+            "其他台股會改用網站自己累積的走勢資料。"
+        ),
+        "tracked_codes": TRACKED_TW_HISTORY_CODES,
+        "by_code": by_code,
+    }
+    with open(HISTORY_OUTPUT_PATH, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+
+    print(
+        f"台股歷史股價更新完成：這次成功更新 {len(updated_codes)}/{len(TRACKED_TW_HISTORY_CODES)} "
+        "檔追蹤股票的真實歷史資料。"
+    )
 
 
 def update_tw_earnings_announcements():
@@ -382,6 +553,12 @@ def main():
         update_tw_earnings_announcements()
     except Exception as err:  # noqa: BLE001 - 這裡故意攔截所有例外，法說會比對失敗不該讓整個排程報錯
         print(f"⚠️  法說會重大訊息比對過程發生未預期的錯誤（{err}），這次略過，不影響股價資料。", file=sys.stderr)
+
+    # 4. 台股真實歷史股價（同樣獨立於股價資料之外，失敗也不能影響 tw_quotes.json）
+    try:
+        update_tw_stock_history()
+    except Exception as err:  # noqa: BLE001 - 這裡故意攔截所有例外，歷史股價更新失敗不該讓整個排程報錯
+        print(f"⚠️  台股歷史股價更新過程發生未預期的錯誤（{err}），這次略過，不影響股價資料。", file=sys.stderr)
 
 
 if __name__ == "__main__":

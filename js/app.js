@@ -4,7 +4,7 @@
 // 取代原本展示版用 Math.random() 模擬出來的假報價。
 // ============================================================
 
-import { getTwStockQuote, getTwStockHistoryPoints } from "./providers/twse.js";
+import { getTwStockQuote, getTwStockHistoryPoints, getTwRealHistoryPoints } from "./providers/twse.js";
 import {
     getGoldQuoteUsd,
     getUsdTwdRate,
@@ -517,18 +517,27 @@ async function renderStockDetail(item) {
     const noteEl = document.getElementById("stock-chart-note");
     const chipsTabBtn = document.getElementById("tab-btn-chips");
     if (item.market === "TW") {
-        const points = getTwStockHistoryPoints(item.symbol);
+        let points = await getTwRealHistoryPoints(item.symbol);
+        let isRealHistory = Boolean(points);
+        if (!points) {
+            points = getTwStockHistoryPoints(item.symbol);
+        }
         drawChart("stockChart", "stockChartInstance", points, `${quote.name} (${item.symbol})`, "#74B9FF");
-        noteEl.textContent =
-            points.length < 5
-                ? `台股走勢圖是每次你打開網站累積一筆真實收盤價，目前只有 ${points.length} 筆，持續使用會慢慢累積到 30 天喔！`
-                : `目前已累積 ${points.length} 筆真實收盤價（每天最多新增一筆）。`;
+
+        if (isRealHistory) {
+            noteEl.textContent = `資料來源：證交所每日收盤行情，這是真實的歷史資料（近 ${points.length} 個交易日）。`;
+        } else {
+            noteEl.textContent =
+                points.length < 5
+                    ? `這檔股票目前還沒有串接證交所的真實歷史股價，走勢圖改成每次你打開網站累積一筆真實收盤價，目前只有 ${points.length} 筆，持續使用會慢慢累積到 30 天喔！`
+                    : `這檔股票目前還沒有串接證交所的真實歷史股價，走勢圖是網站自己累積出來的（目前 ${points.length} 筆，每天最多新增一筆）。`;
+        }
 
         chipsTabBtn.hidden = false;
         renderKvTable("tw-valuation-table", quote.valuationRaw);
         renderKvTable("tw-institutional-table", quote.institutionalRaw);
         renderKvTable("tw-margin-table", quote.marginRaw);
-        renderHighLowCard(points, quote.price, "TW");
+        renderHighLowCard(points, quote.price, "TW", isRealHistory);
     } else {
         let usPoints = [];
         try {
@@ -540,7 +549,7 @@ async function renderStockDetail(item) {
         }
         chipsTabBtn.hidden = true; // 這個分頁是台股專屬的公開資料，美股沒有對應資料源
         if (chipsTabBtn.classList.contains("active")) switchDetailTab("chart");
-        renderHighLowCard(usPoints, quote.price, "US");
+        renderHighLowCard(usPoints, quote.price, "US", true);
     }
 
     renderNewsSection(item, quote);
@@ -593,12 +602,18 @@ function renderKvTable(containerId, rawObj) {
 // ------------------------------------------------------------
 function computeHighLowStats(points, currentPrice) {
     if (!points || points.length === 0 || !Number.isFinite(currentPrice)) return null;
-    const prices = points.map((p) => p.price).filter((p) => Number.isFinite(p));
-    if (prices.length === 0) return null;
+
+    // 有些資料來源（例如證交所真實歷史股價）每一天都有自己的日內最高／
+    // 最低價，這時候用真正的日內高低點來算區間會更準確；如果只有收盤價
+    // （例如網站自己累積出來的資料），就退而求其次，用收盤價本身當作
+    // 那一天的高低點。
+    const highs = points.map((p) => (Number.isFinite(p.high) ? p.high : p.price)).filter((v) => Number.isFinite(v));
+    const lows = points.map((p) => (Number.isFinite(p.low) ? p.low : p.price)).filter((v) => Number.isFinite(v));
+    if (highs.length === 0 || lows.length === 0) return null;
 
     // 把「今天」的價格也算進區間裡，這樣「創新高/新低」才會包含最新這筆
-    const periodHigh = Math.max(...prices, currentPrice);
-    const periodLow = Math.min(...prices, currentPrice);
+    const periodHigh = Math.max(...highs, currentPrice);
+    const periodLow = Math.min(...lows, currentPrice);
     const days = new Set(points.map((p) => p.date)).size;
 
     return {
@@ -612,7 +627,7 @@ function computeHighLowStats(points, currentPrice) {
     };
 }
 
-function renderHighLowCard(points, currentPrice, market) {
+function renderHighLowCard(points, currentPrice, market, isRealHistory) {
     const noteEl = document.getElementById("stock-highlow-note");
     const tableEl = document.getElementById("stock-highlow-table");
     const stats = computeHighLowStats(points, currentPrice);
@@ -624,7 +639,9 @@ function renderHighLowCard(points, currentPrice, market) {
         return;
     }
 
-    noteEl.textContent = `統計範圍：目前已累積的近 ${stats.days} 個交易日資料`;
+    noteEl.textContent = isRealHistory
+        ? `統計範圍：近 ${stats.days} 個交易日的真實歷史資料`
+        : `統計範圍：目前已累積的近 ${stats.days} 個交易日資料`;
 
     const highLine = stats.isNewHigh
         ? `🚀 目前價位就是這段期間的最高價（創近 ${stats.days} 日新高）`
