@@ -45,6 +45,7 @@
 # ============================================================
 
 import json
+import os
 import sys
 import urllib.request
 import urllib.error
@@ -181,14 +182,23 @@ def relabel(row, label_map):
 
 
 def fetch_optional(label, url):
-    """抓「加分」資料（非股價本身）：失敗就回傳 None，不中止整個流程。"""
+    """抓「加分」資料（非股價本身）：失敗就回傳 None，不中止整個流程。
+
+    這裡故意攔截所有例外（not 只挑幾種），因為證交所的舊版系統對看起來
+    像機器人的請求有時候會用連線中斷、回傳不完整內容等方式擋下來，
+    這些底層錯誤不一定是 urllib.error.URLError，用 bare Exception 才能
+    確保真的不會讓整個排程失敗（之前發生過的事故：這裡漏接的例外導致
+    某份資料的檔案一直沒被建立，害 git commit 因為檔案不存在而失敗，
+    連累股價資料好幾天沒能成功更新，詳見 update_tw_earnings_announcements
+    和 update_tw_stock_history 開頭「保證檔案一定存在」的處理）。
+    """
     try:
         data = fetch_json(url)
         if not isinstance(data, list) or len(data) == 0:
             print(f"⚠️  「{label}」回傳的格式不是預期的非空陣列，這次略過。", file=sys.stderr)
             return None
         return data
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
+    except Exception as err:  # noqa: BLE001 - 見上面說明，故意攔截所有例外
         print(f"⚠️  抓取「{label}」失敗（{err}），這次略過，不影響其他資料。", file=sys.stderr)
         return None
 
@@ -210,8 +220,7 @@ def fetch_institutional_t86():
     try:
         warmup_req = urllib.request.Request(T86_REFERER_PAGE, headers=BROWSER_HEADERS)
         opener.open(warmup_req, timeout=20).read()
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-        # 熱身失敗不影響後面繼續嘗試，只是成功機率可能會低一點
+    except Exception:  # noqa: BLE001 - 熱身失敗不影響後面繼續嘗試，只是成功機率可能會低一點
         pass
 
     now_taipei = datetime.now(timezone.utc) + TAIPEI_OFFSET
@@ -228,7 +237,7 @@ def fetch_institutional_t86():
             with opener.open(req, timeout=30) as response:
                 raw = response.read()
             payload = json.loads(raw.decode("utf-8"))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
+        except Exception as err:  # noqa: BLE001 - 故意攔截所有例外，見 fetch_optional 開頭的說明
             print(f"⚠️  「三大法人買賣超」（{date_str}）抓取失敗：{err}，改試前一天。", file=sys.stderr)
             continue
 
@@ -302,7 +311,7 @@ def fetch_stock_day_month(opener, stock_no, date_str):
         with opener.open(req, timeout=30) as response:
             raw = response.read()
         payload = json.loads(raw.decode("utf-8"))
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
+    except Exception as err:  # noqa: BLE001 - 故意攔截所有例外，見 fetch_optional 開頭的說明
         print(f"⚠️  抓取 {stock_no} 在 {date_str[:6]} 月份的歷史股價失敗：{err}，這次略過。", file=sys.stderr)
         return []
 
@@ -358,12 +367,46 @@ def load_tracked_tw_codes():
     return codes or list(DEFAULT_TRACKED_TW_CODES)
 
 
+def ensure_file_exists(path, empty_payload):
+    """確保這份「加分」資料檔案一定存在，就算內容是空的也好。
+
+    重要背景（真實發生過的事故）：.github/workflows/update-tw-quotes.yml
+    的 commit 步驟會一次 `git add` 好幾個檔案，如果其中一個檔案「完全
+    不存在」（例如這份資料第一次抓取就失敗，從來沒被寫出來過），
+    `git add` 對不存在的路徑會直接報錯（exit code 128），導致整個
+    commit 步驟失敗、git push 永遠不會執行——後果是連最重要的
+    tw_quotes.json 股價資料也一起卡住，好幾天都沒辦法更新到網站上
+    （這正是這行註解出現在這裡的原因）。
+
+    所以在真正嘗試抓取「加分」資料之前，先確保檔案一定存在（即使是
+    空殼），這樣不管後面抓不抓得到真實資料，`git add` 都不會因為
+    「找不到這個檔案」而整個失敗。
+    """
+    if os.path.exists(path):
+        return
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(empty_payload, f, ensure_ascii=False)
+    except OSError as err:
+        print(f"⚠️  無法建立空白版本的 {path}（{err}），先略過。", file=sys.stderr)
+
+
 def update_tw_stock_history():
     """更新台股「真實」歷史股價檔案（data/tw_stock_history.json）。
 
     跟法說會比對一樣，這個函式故意獨立於股價那份資料之外：就算這裡整個
     失敗，也絕對不能影響到 tw_quotes.json 的更新（股價是最重要的資料）。
     """
+    ensure_file_exists(
+        HISTORY_OUTPUT_PATH,
+        {
+            "updated_at": None,
+            "note": "尚未成功抓取過真實歷史股價，這是先建立的空白版本。",
+            "tracked_codes": [],
+            "by_code": {},
+        },
+    )
+
     tracked_codes = load_tracked_tw_codes()
     if not tracked_codes:
         return
@@ -373,7 +416,7 @@ def update_tw_stock_history():
     try:
         warmup_req = urllib.request.Request(STOCK_DAY_REFERER_PAGE, headers=BROWSER_HEADERS)
         opener.open(warmup_req, timeout=20).read()
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+    except Exception:  # noqa: BLE001 - 熱身失敗不影響後面繼續嘗試，只是成功機率可能會低一點
         pass
 
     now_taipei = datetime.now(timezone.utc) + TAIPEI_OFFSET
@@ -433,9 +476,18 @@ def update_tw_earnings_announcements():
     這個函式故意獨立於股價那份資料之外：就算這裡整個失敗，也絕對不能
     影響到 tw_quotes.json 的更新（股價是最重要的資料）。
     """
+    ensure_file_exists(
+        EARNINGS_OUTPUT_PATH,
+        {
+            "updated_at": None,
+            "note": "尚未成功抓取過重大訊息，這是先建立的空白版本。",
+            "by_code": {},
+        },
+    )
+
     try:
         rows = fetch_json(MATERIAL_NEWS_URL)
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
+    except Exception as err:  # noqa: BLE001 - 故意攔截所有例外，見 fetch_optional 開頭的說明
         print(f"⚠️  抓取「上市公司重大訊息」失敗（{err}），這次略過法說會比對，不影響股價資料。", file=sys.stderr)
         return
 
@@ -519,7 +571,7 @@ def main():
     # 1. 股價資料是必要的，抓不到就整個中止（避免網站用壞掉/空白的資料覆蓋現有檔案）
     try:
         stocks = fetch_json(ENDPOINTS["stock_day_all"])
-    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, ValueError) as err:
+    except Exception as err:  # noqa: BLE001 - 故意攔截所有例外，見 fetch_optional 開頭的說明
         print(f"抓取台股股價資料失敗：{err}", file=sys.stderr)
         print("為了避免用壞掉的資料覆蓋現有檔案，這次不會更新 data/tw_quotes.json。", file=sys.stderr)
         sys.exit(1)

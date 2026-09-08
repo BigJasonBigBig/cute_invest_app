@@ -34,7 +34,14 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/tw_quotes.json data/tw_earnings_announcements.json data/tw_stock_history.json
+          git add data/tw_quotes.json
+          # 這幾份是「加分」資料，理論上 scripts/fetch_tw_quotes.py 現在一定
+          # 會建立它們（就算內容是空的），但這裡還是用 -f 存在檢查再保險一層：
+          # 之前發生過的事故就是其中一個檔案完全不存在時 git add 直接報錯
+          # (exit code 128)，導致這個 commit 步驟整個失敗、git push 永遠不會
+          # 執行，連 tw_quotes.json 都被拖累好幾天沒能成功更新。
+          [ -f data/tw_earnings_announcements.json ] && git add data/tw_earnings_announcements.json
+          [ -f data/tw_stock_history.json ] && git add data/tw_stock_history.json
           if git diff --cached --quiet; then
             echo "資料沒有變化，不需要 commit。"
           else
