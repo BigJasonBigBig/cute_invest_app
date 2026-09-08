@@ -36,6 +36,11 @@
 # 不會讓整個流程失敗，只會跳過那份、在網站上顯示「查無資料」，其他資料
 # （尤其是最重要的股價）還是會正常更新。
 #
+# 另外實測發現：STOCK_DAY_ALL（全部股票的當天收盤價）有時候會比 STOCK_DAY
+# （單一個股）慢一拍才更新，導致追蹤股票明明證交所已經有當天資料，網站上
+# 卻還是顯示前一個交易日的價格。針對這個落差，見 refresh_tracked_prices_
+# from_stock_day()：只對「有追蹤」的股票額外確認一次、有更新的話就覆蓋。
+#
 # 什麼時候會用到這支程式？
 #   1. GitHub Actions 會自動、定期執行它（見
 #      .github/workflows/update-tw-quotes.yml），部署到 GitHub Pages
@@ -287,6 +292,30 @@ def parse_tw_number(raw):
         return None
 
 
+def roc7_to_ad_date(roc7):
+    """把 STOCK_DAY_ALL 那種沒有分隔符的民國年日期字串（例如 "1150907"）
+    轉成「2026-09-07」這種西元日期字串，跟 STOCK_DAY（單一個股）那邊
+    算出來的日期格式統一，才能直接用字串比較新舊。轉不出來就回傳 None。"""
+    s = str(roc7)
+    if len(s) != 7:
+        return None
+    try:
+        roc_year = int(s[0:3])
+        month = int(s[3:5])
+        day = int(s[5:7])
+        return f"{roc_year + 1911:04d}-{month:02d}-{day:02d}"
+    except ValueError:
+        return None
+
+
+def ad_date_to_roc7(ad_date_str):
+    """把「2026-09-08」轉回 STOCK_DAY_ALL 用的「1150908」格式，這樣覆蓋
+    價格時，Date 欄位的格式還是跟其他沒被覆蓋的股票一致。"""
+    year, month, day = ad_date_str.split("-")
+    roc_year = int(year) - 1911
+    return f"{roc_year:03d}{month}{day}"
+
+
 def _recent_month_starts(n_months, now_taipei):
     """回傳最近 n_months 個月份的「該月 1 號」日期字串 (YYYYMMDD)，由舊到新
     排序。證交所 STOCK_DAY 只看年月，日期用 1 號即可代表整個月份。"""
@@ -339,6 +368,94 @@ def fetch_stock_day_month(opener, stock_no, date_str):
         except (ValueError, TypeError):
             continue
     return points
+
+
+def refresh_tracked_prices_from_stock_day(stocks, base_code_key, tracked_codes):
+    """修正實測發現的問題：開放資料平台 STOCK_DAY_ALL（main() 抓「全部股票」
+    當天收盤價用的那份資料）有時候會比證交所自己舊版系統的「單一個股」
+    報表 STOCK_DAY 慢一拍才更新當天收盤價——實測遇過的狀況是：已經收盤
+    好幾個小時，STOCK_DAY 那邊已經有當天的收盤價了，STOCK_DAY_ALL 卻還
+    停在前一個交易日，導致使用者手動重新整理、甚至手動觸發排程重跑，
+    畫面上看到的還是「昨天」的價格，誤以為是排程或程式又出問題了。
+
+    這裡只針對「有追蹤」的少數股票（tw_tracked_stocks.txt）額外去確認
+    STOCK_DAY 有沒有更新的資料，不是對全市場都這樣做，才不會對證交所
+    發出太多請求（跟 update_tw_stock_history 是同樣的考量）。如果
+    STOCK_DAY 也還是沒有更新的資料（例如證交所兩邊都還沒發布），就
+    什麼都不改，繼續用 STOCK_DAY_ALL 原本的資料。
+
+    這個函式故意整個包在 try/except 裡呼叫（見 main()）：就算這裡完全
+    失敗，也絕對不能連累 tw_quotes.json 用 STOCK_DAY_ALL 資料正常寫入——
+    股價本身永遠是最優先的，這只是錦上添花的即時性修正。
+    """
+    if not tracked_codes:
+        return
+
+    stocks_by_code = {s.get(base_code_key): s for s in stocks}
+
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    try:
+        warmup_req = urllib.request.Request(STOCK_DAY_REFERER_PAGE, headers=BROWSER_HEADERS)
+        opener.open(warmup_req, timeout=20).read()
+    except Exception:  # noqa: BLE001 - 熱身失敗不影響後面繼續嘗試，只是成功機率可能會低一點
+        pass
+
+    now_taipei = datetime.now(timezone.utc) + TAIPEI_OFFSET
+    month_dates = _recent_month_starts(2, now_taipei)  # 這個月 + 上個月，足夠算出漲跌價差
+
+    refreshed = []
+    for code in tracked_codes:
+        row = stocks_by_code.get(code)
+        if row is None:
+            continue  # STOCK_DAY_ALL 裡本來就沒有這檔股票（例如代號打錯），交給其他邏輯處理
+
+        try:
+            points_by_date = {}
+            for date_str in month_dates:
+                for p in fetch_stock_day_month(opener, code, date_str):
+                    if p.get("date") and p.get("close") is not None:
+                        points_by_date[p["date"]] = p
+        except Exception as err:  # noqa: BLE001 - 見函式開頭說明，單一檔股票出錯不影響其他追蹤股票
+            print(f"⚠️  確認 {code} 是否有更新收盤價時發生錯誤（{err}），這檔繼續用 STOCK_DAY_ALL 的資料。", file=sys.stderr)
+            continue
+
+        if not points_by_date:
+            continue
+
+        sorted_dates = sorted(points_by_date.keys())
+        latest_date = sorted_dates[-1]
+        existing_date = roc7_to_ad_date(row.get("Date"))
+
+        if existing_date and latest_date <= existing_date:
+            continue  # STOCK_DAY_ALL 的資料已經跟 STOCK_DAY 一樣新（或更新），不用覆蓋
+
+        latest = points_by_date[latest_date]
+        prev_close = points_by_date[sorted_dates[-2]]["close"] if len(sorted_dates) >= 2 else None
+        change = (
+            latest["close"] - prev_close
+            if latest.get("close") is not None and prev_close is not None
+            else None
+        )
+
+        row["Date"] = ad_date_to_roc7(latest_date)
+        if latest.get("open") is not None:
+            row["OpeningPrice"] = f"{latest['open']:.2f}"
+        if latest.get("high") is not None:
+            row["HighestPrice"] = f"{latest['high']:.2f}"
+        if latest.get("low") is not None:
+            row["LowestPrice"] = f"{latest['low']:.2f}"
+        if latest.get("close") is not None:
+            row["ClosingPrice"] = f"{latest['close']:.2f}"
+        if change is not None:
+            row["Change"] = f"{change:+.2f}"
+        refreshed.append(code)
+
+    if refreshed:
+        print(
+            f"追蹤股票中有 {len(refreshed)} 檔（{', '.join(refreshed)}）用證交所單一個股資料 "
+            "(STOCK_DAY) 補上比 STOCK_DAY_ALL 更新的收盤價。"
+        )
 
 
 def load_tracked_tw_codes():
@@ -584,6 +701,15 @@ def main():
     if not base_code_key:
         print("連股價資料裡都找不到股號欄位，證交所可能改版了，先不更新檔案。", file=sys.stderr)
         sys.exit(1)
+
+    # 1.5 針對「有追蹤」的股票，額外確認一次證交所單一個股報表 STOCK_DAY
+    # 是不是有比 STOCK_DAY_ALL 更新的收盤價（見函式開頭說明：這是實測
+    # 真的遇過的落差，不是假設性問題）。故意包 try/except，就算這裡
+    # 整個失敗，也不能影響上面已經抓到、即將寫入的股價資料。
+    try:
+        refresh_tracked_prices_from_stock_day(stocks, base_code_key, load_tracked_tw_codes())
+    except Exception as err:  # noqa: BLE001 - 見上面說明
+        print(f"⚠️  確認追蹤股票是否有更新收盤價時發生未預期的錯誤（{err}），繼續使用 STOCK_DAY_ALL 的資料。", file=sys.stderr)
 
     # 2. 三份「加分」資料：本益比等、三大法人、融資融券。抓不到就跳過，不影響股價本身。
     valuation_rows = fetch_optional("本益比／殖利率／股價淨值比", ENDPOINTS["valuation"])
