@@ -65,6 +65,27 @@ async function loadLocalQuotes() {
     return data;
 }
 
+// 證交所的日期欄位是民國年、沒有分隔符的格式（例如 "1150907"），直接
+// 顯示給使用者看完全看不懂，容易被誤會成亂碼或錯誤資料。這裡轉成好讀
+// 的西元日期，並且刻意跟「資料抓取時間」分開顯示——證交所公布最新
+// 交易日資料本來就可能有大約一天的正常延遲（例如收盤後幾小時內，
+// 官方資料有時還是前一個交易日的，隔天才會更新），這不是網站故障，
+// 但畫面上一定要讓「這筆價格是哪一天收盤的」一目瞭然，使用者才不會
+// 誤以為「抓取時間是今天」等於「價格也是今天的」。
+const WEEKDAY_LABELS = ["日", "一", "二", "三", "四", "五", "六"];
+function formatRocDate(rocStr) {
+    if (!rocStr || String(rocStr).length !== 7) return null;
+    const s = String(rocStr);
+    const rocYear = parseInt(s.slice(0, 3), 10);
+    const month = s.slice(3, 5);
+    const day = s.slice(5, 7);
+    if (!Number.isFinite(rocYear)) return null;
+    const adYear = rocYear + 1911;
+    const dateObj = new Date(adYear, parseInt(month, 10) - 1, parseInt(day, 10));
+    if (Number.isNaN(dateObj.getTime())) return { text: `${adYear}/${month}/${day}`, dateObj: null };
+    return { text: `${adYear}/${month}/${day}（週${WEEKDAY_LABELS[dateObj.getDay()]}）`, dateObj };
+}
+
 async function fetchTwStockDaily(stockNo) {
     const data = await loadLocalQuotes();
     const row = data.stocks.find((item) => item.Code === stockNo);
@@ -77,6 +98,20 @@ async function fetchTwStockDaily(stockNo) {
     const changeNum = parseFloat(String(row.Change).replace(/[^\d.+-]/g, "")) || 0;
     const prevClose = close - changeNum;
 
+    const tradingDate = formatRocDate(row.Date);
+    const fetchedAtLabel = data.retrieved_at_taipei || data.retrieved_at || "未知";
+
+    // 交易日跟「今天」差超過 4 個日曆天（含週末最多也就 2~3 天），代表
+    // 排程可能又卡住了，主動用比較顯眼的方式提醒，而不是讓使用者自己
+    // 去猜「怎麼價格看起來怪怪的」。
+    let staleDaysWarning = null;
+    if (tradingDate && tradingDate.dateObj) {
+        const diffDays = Math.floor((Date.now() - tradingDate.dateObj.getTime()) / (24 * 60 * 60 * 1000));
+        if (diffDays >= 4) {
+            staleDaysWarning = `⚠️ 這筆資料已經是 ${diffDays} 天前的收盤價，可能是背景排程暫時沒有成功更新，不是即時價格。`;
+        }
+    }
+
     return {
         symbol: stockNo,
         name: row.Name || stockNo,
@@ -87,7 +122,8 @@ async function fetchTwStockDaily(stockNo) {
         prevClose,
         change: changeNum,
         changePercent: prevClose ? (changeNum / prevClose) * 100 : 0,
-        asOf: `交易日 ${row.Date || "--"}（資料抓取時間：${data.retrieved_at_taipei || data.retrieved_at || "未知"}）`,
+        asOf: `${tradingDate ? tradingDate.text : (row.Date || "--")} 收盤價｜最新抓取時間：${fetchedAtLabel}`,
+        staleDaysWarning,
         isRealtime: false,
         source: "twse-daily-cached",
         // 額外的籌碼資訊（本益比等 / 三大法人 / 融資融券），由

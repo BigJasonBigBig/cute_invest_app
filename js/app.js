@@ -508,6 +508,9 @@ async function renderStockDetail(item) {
     const badgeEl = document.getElementById("detail-stock-badge");
     badgeEl.innerHTML = `${fmtMoney(quote.price, 2)}<div class="${badge.cls}" style="font-size:1rem; margin-top:2px;">${badge.html}</div>`;
     document.getElementById("detail-stock-asof").textContent = quote.asOf ? `資料時間：${quote.asOf}` : "";
+    const staleWarningEl = document.getElementById("detail-stock-stale-warning");
+    staleWarningEl.textContent = quote.staleDaysWarning || "";
+    staleWarningEl.hidden = !quote.staleDaysWarning;
 
     document.getElementById("detail-open").textContent = fmtMoney(quote.open, 2);
     document.getElementById("detail-prev-close").textContent = fmtMoney(quote.prevClose, 2);
