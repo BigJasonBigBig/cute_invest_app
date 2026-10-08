@@ -1110,3 +1110,84 @@ footer {
 .floating-mascot {
     animation: float 4s ease-in-out infinite;
 }
+
+/* ============================================================
+   我的持股
+   ============================================================ */
+.pf-summary {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.pf-summary .stat-value small {
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.pnl-up { color: #00b894; }
+.pnl-down { color: #d63031; }
+
+.pf-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 8px;
+}
+
+.pf-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+    min-width: 640px;
+}
+
+.pf-table th {
+    text-align: left;
+    padding: 10px 10px;
+    border-bottom: 3px solid var(--primary-light);
+    font-weight: 900;
+    white-space: nowrap;
+}
+
+.pf-table td {
+    padding: 10px 10px;
+    border-bottom: 1px dashed var(--primary-light);
+    vertical-align: top;
+    font-weight: 700;
+}
+
+.pf-table .num { text-align: right; white-space: nowrap; }
+.pf-table small { color: var(--text-muted); font-weight: 600; }
+.pf-table .pnl-up small { color: #00b894; }
+.pf-table .pnl-down small { color: #d63031; }
+
+.pf-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: 900;
+    background-color: var(--bg-secondary);
+    color: var(--primary-dark);
+    white-space: nowrap;
+}
+.pf-badge-buy { background-color: rgba(85, 239, 196, 0.25); color: #00806a; }
+.pf-badge-sell { background-color: rgba(255, 118, 117, 0.22); color: #b02a29; }
+
+.pf-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 4px 16px;
+    margin-top: 14px;
+}
+
+.pf-form .form-group { margin-bottom: 12px; }
+.pf-form .form-group[hidden] { display: none; }
+.pf-form .pf-wide { grid-column: 1 / -1; }
+
+@media (max-width: 768px) {
+    .pf-summary { grid-template-columns: repeat(2, 1fr); }
+    .pf-form { grid-template-columns: 1fr 1fr; gap: 4px 12px; }
+    .pf-form .form-input { font-size: 1rem; padding: 10px 12px; }
+}

@@ -18,6 +18,7 @@ import {
 } from "./watchlist.js";
 import { hasFinnhubKey, getUsCompanyNews, buildNewsSearchLinks } from "./providers/news.js";
 import { getUsLastEarningsResult, getUsNextEarningsDate, getTwEarningsAnnouncements } from "./providers/earnings.js";
+import { initPortfolio, onPortfolioShown, refreshPortfolioQuotes } from "./portfolio-ui.js";
 
 const CFG = window.APP_CONFIG || {};
 const TAEL_TO_OZ = 1.2057; // 1 台兩 ≈ 1.2057 盎司 (37.5g / 31.1035g)
@@ -834,47 +835,59 @@ async function renderEarningsSection(item, quote) {
 // ------------------------------------------------------------
 // 分頁切換
 // ------------------------------------------------------------
-window.switchPage = function (pageName) {
-    const goldSection = document.getElementById("dashboard");
-    const watchlistSection = document.getElementById("watchlist-section");
-    const navGold = document.getElementById("nav-gold");
-    const navWatchlist = document.getElementById("nav-watchlist");
-
-    const heroBadge = document.getElementById("hero-badge");
-    const heroTitle = document.getElementById("hero-title");
-    const heroDesc = document.getElementById("hero-desc");
-    const heroBtnPrimary = document.getElementById("hero-btn-primary");
-    const heroBtnSecondary = document.getElementById("hero-btn-secondary");
-
-    if (pageName === "gold") {
-        goldSection.style.display = "block";
-        watchlistSection.style.display = "none";
-        navGold.classList.add("active");
-        navWatchlist.classList.remove("active");
-
-        heroBadge.textContent = "✨ 專為理財新手打造的避險入門課";
-        heroTitle.innerHTML = "理財第一步！<br>跟著小芽認識 <span>國際黃金</span>";
-        heroDesc.textContent = "覺得投資很難、數字很冰冷嗎？別擔心！黃金是世界上最古老也最安穩的「避險守護神」。讓我們用最簡單、最可愛的方式，一起看懂金價波動，規劃你的第一筆黃金夢想基金吧！";
-        heroBtnPrimary.textContent = "看國際金價 📊";
-        heroBtnPrimary.href = "#dashboard";
-        heroBtnSecondary.textContent = "黃金新手包 💡";
-        heroBtnSecondary.href = "#guide";
-    } else {
-        goldSection.style.display = "none";
-        watchlistSection.style.display = "block";
-        navWatchlist.classList.add("active");
-        navGold.classList.remove("active");
-
-        heroBadge.textContent = "📈 想追蹤哪支股票，自己加進來！";
-        heroTitle.innerHTML = "打造你的<br>專屬 <span>自選股清單</span>";
-        heroDesc.textContent = "不管是台股還是美股，輸入代號就能加進你的自選股清單，隨時掌握報價變化。小芽也幫你準備了台積電的深入介紹，帶你認識法說會與財報怎麼看！";
-        heroBtnPrimary.textContent = "看我的自選股 📊";
-        heroBtnPrimary.href = "#watchlist-section";
-        heroBtnSecondary.textContent = "法說會與財報 📢";
-        heroBtnSecondary.href = "#stock-earnings-section";
-
-        if (state.stockChartInstance) state.stockChartInstance.resize();
+const PAGES = {
+    gold: {
+        sectionId: "dashboard",
+        navId: "nav-gold",
+        badge: "✨ 專為理財新手打造的避險入門課",
+        titleHtml: "理財第一步！<br>跟著小芽認識 <span>國際黃金</span>",
+        desc: "覺得投資很難、數字很冰冷嗎？別擔心！黃金是世界上最古老也最安穩的「避險守護神」。讓我們用最簡單、最可愛的方式，一起看懂金價波動，規劃你的第一筆黃金夢想基金吧！",
+        primary: ["看國際金價 📊", "#dashboard"],
+        secondary: ["黃金新手包 💡", "#guide"]
+    },
+    watchlist: {
+        sectionId: "watchlist-section",
+        navId: "nav-watchlist",
+        badge: "📈 想追蹤哪支股票，自己加進來！",
+        titleHtml: "打造你的<br>專屬 <span>自選股清單</span>",
+        desc: "不管是台股還是美股，輸入代號就能加進你的自選股清單，隨時掌握報價變化。小芽也幫你準備了台積電的深入介紹，帶你認識法說會與財報怎麼看！",
+        primary: ["看我的自選股 📊", "#watchlist-section"],
+        secondary: ["法說會與財報 📢", "#stock-earnings-section"]
+    },
+    portfolio: {
+        sectionId: "portfolio-section",
+        navId: "nav-portfolio",
+        badge: "💰 你的買賣，自己記、自己算",
+        titleHtml: "記下每一筆<br>看懂你的 <span>賺賠</span>",
+        desc: "輸入你手上的持股和每次買賣，小芽幫你算出均價、市值，還有賺了還是賠了。資料只存在你的瀏覽器裡，不會上傳。",
+        primary: ["看我的持股 💰", "#portfolio-section"],
+        secondary: ["新增一筆紀錄 ✏️", "#pf-form"]
     }
+};
+
+window.switchPage = function (pageName) {
+    const page = PAGES[pageName] || PAGES.gold;
+
+    Object.entries(PAGES).forEach(([name, cfg]) => {
+        const section = document.getElementById(cfg.sectionId);
+        const nav = document.getElementById(cfg.navId);
+        const active = PAGES[name] === page;
+        if (section) section.style.display = active ? "block" : "none";
+        if (nav) nav.classList.toggle("active", active);
+    });
+
+    document.getElementById("hero-badge").textContent = page.badge;
+    document.getElementById("hero-title").innerHTML = page.titleHtml;
+    document.getElementById("hero-desc").textContent = page.desc;
+    const primary = document.getElementById("hero-btn-primary");
+    const secondary = document.getElementById("hero-btn-secondary");
+    primary.textContent = page.primary[0];
+    primary.href = page.primary[1];
+    secondary.textContent = page.secondary[0];
+    secondary.href = page.secondary[1];
+
+    if (page === PAGES.watchlist && state.stockChartInstance) state.stockChartInstance.resize();
+    if (page === PAGES.portfolio) onPortfolioShown();
 };
 
 // ------------------------------------------------------------
@@ -916,6 +929,9 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     document.getElementById("add-stock-form").addEventListener("submit", handleAddStock);
 
+    // 我的持股
+    initPortfolio();
+
     // 定期更新 (預設每 60 秒，可在 js/config.js 調整)
     const refreshMs = CFG.REFRESH_INTERVAL_MS || 60000;
     document.getElementById("gold-refresh-note").textContent = `每 ${Math.round(refreshMs / 1000)} 秒自動更新一次`;
@@ -923,6 +939,8 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(() => {
         refreshGold();
         refreshWatchlistQuotes();
+        const pf = document.getElementById("portfolio-section");
+        if (pf && pf.style.display === "block") refreshPortfolioQuotes();
     }, refreshMs);
 
     // 個股詳細頁的分頁籤按鈕

@@ -29,6 +29,7 @@
             <ul class="nav-menu" id="nav-menu">
                 <li><a href="#" class="nav-link active" id="nav-gold" onclick="switchPage('gold'); return false;">黃金專區 🪙</a></li>
                 <li><a href="#" class="nav-link" id="nav-watchlist" onclick="switchPage('watchlist'); return false;">我的自選股 📈</a></li>
+                <li><a href="#" class="nav-link" id="nav-portfolio" onclick="switchPage('portfolio'); return false;">我的持股 💰</a></li>
                 <li><span class="nav-link nav-link-disabled" title="日常儲蓄與省錢小撇步即將上線，敬請期待！">生活存錢法 🍕（即將推出）</span></li>
             </ul>
         </div>
@@ -451,6 +452,144 @@
     </main>
 
     <!-- Footer -->
+
+    <!-- Main Content Area: 我的持股 -->
+    <main class="main-container" id="portfolio-section" style="display: none;">
+
+        <h2 class="section-title"><span class="section-title-icon">💰</span> 我的持股</h2>
+
+        <div class="card" style="margin-bottom: 30px;">
+            <button type="button" class="info-toggle">ⓘ 損益怎麼算？資料存在哪裡？</button>
+            <div class="card-subtext info-content" hidden>
+                <p>
+                    資料<strong>只存在這個瀏覽器</strong>，不會上傳到任何地方；換電腦、換瀏覽器或清除瀏覽器資料都會消失，
+                    所以請定期按最下面的「匯出備份」存一份檔案。
+                </p>
+                <p style="margin-top:8px;">
+                    均價用「移動平均法」：買進的手續費會算進成本；賣出時，賣掉那部分的成本 ＝ 當時均價 × 賣出股數，
+                    賣出後剩下股票的均價不變。已實現損益 ＝ 賣出金額 − 手續費 − 證交稅 − 賣掉那部分的成本。
+                </p>
+                <p style="margin-top:8px;">
+                    未實現損益 ＝ 現價市值 − 持股成本，<strong>沒有扣掉將來賣出時的手續費和證交稅</strong>，真的賣掉時會比畫面上少一點。
+                    台股現價是最近一個交易日的收盤價；兩個市場分開統計，台股用新台幣、美股用美元，不做匯率換算。
+                    本頁只是記帳與試算工具，不構成投資建議。
+                </p>
+            </div>
+        </div>
+
+        <div class="data-error" id="pf-integrity-error" hidden></div>
+
+        <div class="watchlist-group">
+            <h3 class="watchlist-group-title">🇹🇼 台股（新台幣）</h3>
+            <div class="grid-3 pf-summary" id="pf-summary-tw"></div>
+            <div id="pf-table-tw"></div>
+            <p class="card-subtext" id="pf-note-tw"></p>
+            <p class="watchlist-empty-note" id="pf-empty-tw">還沒有台股紀錄，用下面的表單新增「期初持股」或「買進」。</p>
+        </div>
+
+        <div class="watchlist-group">
+            <h3 class="watchlist-group-title">🇺🇸 美股（美元）</h3>
+            <div class="grid-3 pf-summary" id="pf-summary-us"></div>
+            <div id="pf-table-us"></div>
+            <p class="card-subtext" id="pf-note-us"></p>
+            <p class="watchlist-empty-note" id="pf-empty-us">還沒有美股紀錄，用下面的表單新增「期初持股」或「買進」。</p>
+        </div>
+        <p class="card-subtext" id="pf-quote-note" style="margin: 0 0 30px;"></p>
+
+        <div class="card" style="margin-bottom: 30px;">
+            <h3 style="font-weight:900; margin-bottom:6px;">✏️ 新增一筆紀錄</h3>
+            <p class="card-subtext">現有的持股，每一檔先用「期初持股」輸入一次（股數＋均價）；之後每次買賣再逐筆記錄。</p>
+            <form id="pf-form" class="pf-form">
+                <div class="form-group">
+                    <label class="form-label" for="pf-type">類型</label>
+                    <select id="pf-type" class="form-input">
+                        <option value="open">期初持股（我原本就有的）</option>
+                        <option value="buy" selected>買進</option>
+                        <option value="sell">賣出</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="pf-market">市場</label>
+                    <select id="pf-market" class="form-input">
+                        <option value="TW">🇹🇼 台股</option>
+                        <option value="US">🇺🇸 美股</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="pf-symbol">股票代號</label>
+                    <input type="text" id="pf-symbol" class="form-input" placeholder="例如 2330 或 AAPL" autocomplete="off" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="pf-date">日期</label>
+                    <input type="date" id="pf-date" class="form-input" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="pf-shares">股數</label>
+                    <input type="number" id="pf-shares" class="form-input" min="0" step="any" inputmode="decimal" placeholder="例如 1000" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="pf-price" id="pf-price-label">成交價（每股）</label>
+                    <input type="number" id="pf-price" class="form-input" min="0" step="any" inputmode="decimal" placeholder="例如 650.5" required>
+                </div>
+                <div class="form-group" id="pf-fee-field">
+                    <label class="form-label" for="pf-fee">手續費</label>
+                    <input type="number" id="pf-fee" class="form-input" min="0" step="any" inputmode="decimal" data-auto="1">
+                </div>
+                <div class="form-group" id="pf-tax-field" hidden>
+                    <label class="form-label" for="pf-tax">證交稅（賣出才有）</label>
+                    <input type="number" id="pf-tax" class="form-input" min="0" step="any" inputmode="decimal" data-auto="1">
+                </div>
+                <div class="form-group pf-wide">
+                    <label class="form-label" for="pf-note">備註（選填）</label>
+                    <input type="text" id="pf-note" class="form-input" maxlength="60" placeholder="例如：逢低加碼">
+                </div>
+                <p class="card-subtext pf-wide" id="pf-fee-hint" style="margin-top:-8px;"></p>
+                <div class="data-error pf-wide" id="pf-form-error" hidden></div>
+                <div class="pf-wide">
+                    <button type="submit" class="btn btn-primary" id="pf-submit">+ 記錄這筆</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card" style="margin-bottom: 30px;">
+            <h3 style="font-weight:900; margin-bottom:12px;">📒 交易紀錄</h3>
+            <p class="watchlist-empty-note" id="pf-tx-empty" style="margin-bottom:0;">還沒有任何紀錄。</p>
+            <div class="pf-table-wrap" id="pf-tx-wrap" hidden>
+                <table class="pf-table">
+                    <thead>
+                        <tr><th>日期</th><th>類型</th><th>股票</th><th class="num">股數</th><th class="num">價格</th><th class="num">手續費</th><th class="num">證交稅</th><th class="num">這筆已實現損益</th><th>備註</th><th></th></tr>
+                    </thead>
+                    <tbody id="pf-tx-tbody"></tbody>
+                </table>
+            </div>
+            <p class="card-subtext" style="margin-top:10px;">輸入錯了就按「刪除」再重新記一筆。</p>
+        </div>
+
+        <div class="card" style="margin-bottom: 50px;">
+            <h3 style="font-weight:900; margin-bottom:12px;">⚙️ 手續費設定與備份</h3>
+            <div class="pf-form">
+                <div class="form-group">
+                    <label class="form-label" for="pf-discount">台股手續費折數（10＝不打折，6＝六折）</label>
+                    <input type="number" id="pf-discount" class="form-input" min="0.1" max="10" step="0.1" inputmode="decimal">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="pf-minfee">台股最低手續費</label>
+                    <select id="pf-minfee" class="form-input">
+                        <option value="20">20 元（整股常見）</option>
+                        <option value="1">1 元（零股常見）</option>
+                        <option value="0">不設最低</option>
+                    </select>
+                </div>
+            </div>
+            <p class="card-subtext">股票手續費公定 0.1425%、證交稅賣出時 0.3%（ETF 0.1%）；實際金額以你的券商對帳單為準，每筆都可以手動改。</p>
+            <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;">
+                <button type="button" class="btn btn-secondary" id="pf-export">⬇️ 匯出備份</button>
+                <label class="btn btn-secondary" style="cursor:pointer;">⬆️ 匯入備份<input type="file" id="pf-import" accept="application/json,.json" hidden></label>
+            </div>
+            <p class="card-subtext" id="pf-backup-msg" style="margin-top:10px;"></p>
+        </div>
+    </main>
+
     <footer>
         <div class="footer-content">
             <div class="footer-logo"><span>🌱</span> 小資芽理財</div>
